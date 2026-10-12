@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CSN Exam Registration Portal{% endblock %}</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="{{ url_for('Index') }}">CSN Exam Registration Portal</a>
+
+      <nav aria-label="Main">
+        {% if session.get('user_id') %}
+          <a class="nav-cta" href="{{ url_for('logout') }}">Log out</a>
+        {% else %}
+          <a href="{{ url_for('login_page') }}"
+             {% if request.endpoint == 'login_page' %}aria-current="page"{% endif %}>Log in</a>
+          <a class="nav-cta" href="{{ url_for('register_page') }}"
+             {% if request.endpoint == 'register_page' %}aria-current="page"{% endif %}>Create account</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    {# Shows messages sent from Flask with flash("...") #}
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash" role="status">
+          {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>College of Southern Nevada exam registration. Questions about your exam? Contact your testing center.</p>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

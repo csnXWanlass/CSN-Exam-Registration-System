@@ -1,152 +1,39 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CSN Exam Registration</title>
-<style>
-:root{--bg:#eaf6fd;--card:#fff;--tx:#0f2a3d;--mut:#547189;--ac:#0284c7;--ac2:#38bdf8;--tint:#f2faff;--bd:#cfe8f7;--ok:#0f7a4a;--bad:#c2362b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1b26;--card:#14293a;--tx:#e6f3fc;--mut:#8fb0c7;--ac:#38bdf8;--ac2:#0284c7;--tint:#102333;--bd:#24445c;--ok:#4cc77a;--bad:#f2837a}}
-:root[data-theme="dark"]{--bg:#0d1b26;--card:#14293a;--tx:#e6f3fc;--mut:#8fb0c7;--ac:#38bdf8;--ac2:#0284c7;--tint:#102333;--bd:#24445c;--ok:#4cc77a;--bad:#f2837a}
-*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
-body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
-header{background:linear-gradient(120deg,var(--ac2),var(--ac));box-shadow:0 2px 10px #0284c733;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
-header b{font-size:17px}main{max-width:820px;margin:0 auto;padding:16px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px #0284c714}
-h2{margin:0 0 10px;font-size:18px}label{display:block;margin:10px 0 4px;font-weight:600;font-size:13px}
-input,select{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--tint);color:var(--tx);font:inherit}input:focus,select:focus{outline:2px solid var(--ac2);border-color:var(--ac)}
-button{background:var(--ac);color:#fff;border:0;border-radius:999px;padding:9px 14px;font:inherit;cursor:pointer;margin-top:12px}
-button.sec{background:transparent;color:var(--ac);border:1px solid var(--ac)}button.del{background:var(--bad)}
-button:disabled{opacity:.5;cursor:not-allowed}header button{margin:0;background:#fff;color:#0369a1}
-.tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}.tabs button{margin:0}
-.msg{padding:9px 12px;border-radius:8px;margin:10px 0;background:var(--tint);border:1px solid var(--bd)}.err{color:var(--bad)}.ok{color:var(--ok)}
-.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);white-space:nowrap}th{color:var(--ac);background:var(--tint)}
-.mut{color:var(--mut);font-size:13px}.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:150px}
-.bar{height:8px;background:var(--bd);border-radius:4px;overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ac2),var(--ac))}
-</style></head><body>
-<header><b>CSN Exam Registration</b><span id="who"></span></header>
-<main id="app">
+{% extends "base.html" %}
 
-        <h1 class="text-headline-md font-headline-md font-bold text-primary">Exam Portal</h1>
+{% block title %}Register for exams | CSN Exam Registration Portal{% endblock %}
 
-
-        <div id="auth-modal" style = "display:none; position:flex; inset:0; background:transparent;">  
-        <div> <!--modal card-->
-            <input id="register-first-name" type="text" placeholder="First Name"/>
-            <input id="register-last-name" type="text" placeholder="Last Name"/>
-            <input id ="register-email" type="email" placeholder="Student Email"/>
-             <input id="register-password" type="password" placeholder="Password - NSHE ID"/> 
-            <button onclick="handleRegistration()">Register</button>
-        </div>
-    </div>
-
+{% block content %}
+  <section class="hero">
+    <h1>Pick your exam session and reserve a seat.</h1>
+    <p class="lead">
+      Students and faculty sign in with their CSN email. Browse open sessions,
+      register in a few clicks, and see your upcoming exams in one place.
+    </p>
+    {% if session.get('user_id') %}
+      <p class="lead">You're logged in.</p>
+    {% else %}
+      <div class="actions">
+        <a class="btn btn-primary" href="{{ url_for('register_page') }}">Create account</a>
+        <a class="btn btn-secondary" href="{{ url_for('login_page') }}">Log in</a>
       </div>
-      <div id="auth-buttons" class="flex items-center gap-stack-md">
-        <button onclick="openModal()"
-          class="px-4 py-2 rounded-lg bg-primary text-on-primary font-button text-button hover:bg-primary-container transition-colors shadow-sm active:scale-95 duration-200"
-        >
-          Sign In
+    {% endif %}
+  </section>
 
-          
-        </button>
-        <button onclick="openModal()"
-          class="px-4 py-2 rounded-lg bg-primary text-on-primary font-button text-button hover:bg-primary-container transition-colors shadow-sm active:scale-95 duration-200"
-        >
-          Sign Up
-
-          
-        </button>
-      </div>
-
-<script>
-const saved = sessionStorage.getItem('user');
-if(saved) signIn(JSON.parse(saved));
-
-function signIn(user) {
-  sessionStorage.setItem('user', JSON.stringify(user));
-  closeModal();
-  document.body.classList.add('authenticated');
-  document.getElementById('welcome-name').textContent = `Welcome back, ${user.name}`;
-  console.log('User signed in:', user);
-
-}
-function signOut(){
-  sessionStorage.removeItem('user');
-  sessionStorage.removeItem('token');
-  document.body.classList.remove('authenticated');
-  document.getElementById('welcome-name').textContent = '';
-  console.log('User signed out');
-
-}
-
-function openModal() {
-  document.getElementById('auth-modal').style.display = 'flex';
-  document.getElementById('auth-buttons').style.display = 'none';
-
-}
-
-function closeModal() {
-  document.getElementById('auth-modal').style.display = 'none';
-}
-
-async function handlelogin() {
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-password').value;
-  if(!email || !password) {
-    alert('Please fill in all fields.');
-    return;
-  }
-
-  const res = await fetch('http://localhost:5000/login', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ email, password })
-  });
-
-
-  const data = await res.json();
-  if(res.ok) {
-    sessionStorage.setItem('token', data.access_token);
-    document.getElementById('auth-modal').style.display = 'none';
-    document.getElementById('who').innerText = `Logged in as: ${data.user_name}`;
-    signIn(data.user);
-  }else{
-    showError(data.message || "Login failed. Please try again.");
-  }
-  }
-
-async function handleRegistration() {
-  const first_name = document.getElementById('register-first-name').value;
-  const last_name = document.getElementById('register-last-name').value;
-  const email = document.getElementById('register-email').value;
-  const password = document.getElementById('register-password').value;
-
-  if (!first_name || !last_name || !email || !password) {
-    alert('Please fill in all fields.');
-    return;
-  }
-
-  try {
-    const res = await fetch('/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ first_name, last_name, email, password })
-    });
-    const data = await res.json();
-
-    if (res.ok) {
-      closeModal();
-      alert('Registration successful. Please sign in.');
-    } else if (Array.isArray(data)) {
-      alert(`${data[0].loc[0]}: ${data[0].msg}`);  // validation errors, e.g. "email: Value error, ..."
-    } else {
-      alert(data.error || 'Registration failed. Please try again.');
-    }
-  } catch (err) {
-    console.error(err);
-    alert('Something went wrong (check the Flask terminal): ' + err.message);
-  }
-}
-
-</script>
-</main>
+  <section class="steps" aria-labelledby="steps-heading">
+    <h2 id="steps-heading">How registration works</h2>
+    <ol>
+      <li>
+        <h3>Create an account</h3>
+        <p>Use your CSN email address. Your role is set from it automatically.</p>
+      </li>
+      <li>
+        <h3>Choose a session</h3>
+        <p>Open sessions show the date, time, and how many seats are left.</p>
+      </li>
+      <li>
+        <h3>Confirm your seat</h3>
+        <p>Registered exams appear on your dashboard so you know when to show up.</p>
+      </li>
+    </ol>
+  </section>
+{% endblock %}

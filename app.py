@@ -1,37 +1,60 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
-from project import create_app
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-# from database import get_db
-from project.models import User
-from Schemas import UserRegister, UserLogin, ForgotPassword, ResetPassword, TokenResponse
-#from auth import hash_password, verify_password, create_access_token
-from datetime import datetime, timedelta
+from flask import render_template, request, jsonify, session, redirect, url_for
 from pydantic import ValidationError
-from Schemas import UserRegister, UserLogin
-from project.models import User
-from werkzeug.security import generate_password_hash, check_password_hash
-from project import create_app, db
+
+from project import create_app, db  # call create_app funct and db obj from project/__init__.py
+from project.models import User     # 
+from auth_schemas import UserRegister, UserLogin, TokenResponse
 
 import secrets
 
 app = create_app()
 
+# flask.route: connects url to a function that will handle requests to that url
 @app.route('/', methods=['GET'])
 def Index():
     return render_template('index.html')
 
-
 @app.route('/about', methods=['GET'])
-def about():
+def about_page():
     return jsonify({'message': 'About!'})
 
-
 @app.route('/contact', methods=['GET'])
-def contact():
+def contact_page():
     return jsonify({'message': 'Contact!'})
 
 
+# THIS LOGIN/REGISTRATION PAGES & FUNCTIONS ARE VERY VIBE-CODED, VALIDATE US!!!!
+# Login page is a GET request, so it will return the login.html template
+@app.route('/login', methods=['GET'])
+def login_page():
+    return render_template('login.html')
+
+#Login page is a POST request, so it will validate the data and log the user in.
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        # makes sure email and password are valid, returns a 400 error if not
+        data = UserLogin.model_validate(request.get_json())
+    except ValidationError as e:
+        return jsonify(e.errors(include_context=False)), 400
+
+    # searches for user in the database
+    user = db.session.scalar(db.select(User).filter_by(email=data.email))
+    # if the user is not found or the password is incorrect, return a 401 error
+    if not user or user.password != data.password:
+        return jsonify(error="Incorrect email or password"), 401
+
+    session['user_id'] = user.user_id    
+    return jsonify(message="Logged in"), 200
+
+@app.route('/logout')
+def logout():
+    session.clear()  # Clear session cookie
+    return redirect(url_for('Index'))  # redirect to the index page after logout
+
+@app.route('/register', methods=['GET'])
+def register_page():
+    return render_template('register.html')
 
 @app.route("/register", methods=['POST'])
 def register():
@@ -43,8 +66,6 @@ def register():
     if db.session.scalar(db.select(User).filter_by(email=data.email)):
         return jsonify(error="That email is already registered"), 409
 
-
-    #hashed = generate_password_hash(data.password)  # never store the plain password
     student_id = data.email.split("@")[0]           # the 10 digits before @student.csn.edu
 
     user = User(first_name=data.first_name, last_name=data.last_name, email=data.email, 
@@ -52,6 +73,8 @@ def register():
     db.session.add(user)
     db.session.commit()
     return jsonify(message="Account created"), 201
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)

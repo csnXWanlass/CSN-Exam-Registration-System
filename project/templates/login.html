@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Log in | CSN Exam Registration Portal{% endblock %}
+
+{% block content %}
+  <section class="form-page">
+    <h1>Log in</h1>
+    <p class="lead">Use the CSN email and password you registered with.</p>
+
+    <form id="login-form" novalidate>
+      <label for="email">CSN email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+
+      <label for="password">Password (10-digit ID)</label>
+      <input id="password" name="password" type="password" inputmode="numeric"
+             maxlength="10" autocomplete="current-password" required>
+
+      <div id="form-errors" class="form-errors" role="alert" hidden></div>
+      <div id="form-status" class="form-status" role="status" hidden></div>
+
+      <button class="btn btn-primary" type="submit">Log in</button>
+    </form>
+
+    <p class="form-alt">New here? <a href="{{ url_for('register_page') }}">Create an account</a></p>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('login-form');
+  const errorBox = document.getElementById('form-errors');
+  const statusBox = document.getElementById('form-status');
+
+  function showErrors(lines) {
+    statusBox.hidden = true;
+    errorBox.innerHTML = '';
+    lines.forEach(text => {
+      const p = document.createElement('p');
+      p.textContent = text;
+      errorBox.appendChild(p);
+    });
+    errorBox.hidden = false;
+  }
+
+  function showStatus(text) {
+    errorBox.hidden = true;
+    statusBox.textContent = text;
+    statusBox.hidden = false;
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    errorBox.hidden = true;
+    statusBox.hidden = true;
+
+    const payload = Object.fromEntries(new FormData(form));
+
+    try {
+      const res = await fetch("{{ url_for('login') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const body = await res.json().catch(() => null);   // null if the reply isn't JSON
+
+      if (res.ok) {                                      // 200 OK
+        showStatus((body && body.message) || 'Logged in');
+        setTimeout(() => { window.location.href = "{{ url_for('Index') }}"; }, 1000);
+      } else if (res.status === 400 && Array.isArray(body)) {   // Pydantic validation errors
+        showErrors(body.map(e => `${e.loc.join('.')}: ${e.msg}`));
+      } else if (body && body.error) {                   // 401: {error: "..."}
+        showErrors([body.error]);
+      } else {
+        showErrors([`Server error (${res.status}). Check the Flask terminal for details.`]);
+      }
+    } catch (err) {
+      console.error(err);
+      showErrors(['Could not reach the server. Is Flask running?']);
+    }
+  });
+</script>
+{% endblock %}

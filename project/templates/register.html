@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Create account | CSN Exam Registration Portal{% endblock %}
+
+{% block content %}
+  <section class="form-page">
+    <h1>Create your account</h1>
+    <p class="lead">Use your CSN email address. Your password is your 10-digit student or faculty ID.</p>
+
+    <form id="register-form" novalidate>
+      <label for="first_name">First name</label>
+      <input id="first_name" name="first_name" type="text" maxlength="35" autocomplete="given-name" required>
+
+      <label for="last_name">Last name</label>
+      <input id="last_name" name="last_name" type="text" maxlength="35" autocomplete="family-name" required>
+
+      <label for="email">CSN email</label>
+      <input id="email" name="email" type="email" autocomplete="email" required>
+
+      <label for="password">Password (10-digit ID)</label>
+      <input id="password" name="password" type="password" inputmode="numeric"
+             maxlength="10" autocomplete="new-password" required>
+
+      <div id="form-errors" class="form-errors" role="alert" hidden></div>
+
+      <button class="btn btn-primary" type="submit">Create account</button>
+    </form>
+
+    <p class="form-alt">Already registered? <a href="{{ url_for('login_page') }}">Log in</a></p>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const form = document.getElementById('register-form');
+  const errorBox = document.getElementById('form-errors');
+
+  function showErrors(lines) {
+    errorBox.innerHTML = '';
+    lines.forEach(text => {
+      const p = document.createElement('p');
+      p.textContent = text;          // textContent, not innerHTML, so server text can't inject HTML
+      errorBox.appendChild(p);
+    });
+    errorBox.hidden = false;
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();          // stop the browser's normal form submit
+    errorBox.hidden = true;
+
+    // Collect the fields into a plain object, e.g. {first_name: "...", email: "..."}
+    const payload = Object.fromEntries(new FormData(form));
+
+    try {
+      const res = await fetch("{{ url_for('register') }}", {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const body = await res.json().catch(() => null);   // null if the reply isn't JSON
+
+      if (res.ok) {                                      // 201 Created
+        window.location.href = "{{ url_for('login_page') }}";
+      } else if (res.status === 400 && Array.isArray(body)) {   // Pydantic validation errors
+        showErrors(body.map(e => `${e.loc.join('.')}: ${e.msg}`));
+      } else if (body && body.error) {                   // 409 and other {error: "..."} replies
+        showErrors([body.error]);
+      } else {
+        showErrors([`Server error (${res.status}). Check the Flask terminal for details.`]);
+      }
+    } catch (err) {
+      console.error(err);
+      showErrors(['Could not reach the server. Is Flask running?']);
+    }
+  });
+</script>
+{% endblock %}
