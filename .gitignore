@@ -1,0 +1,10 @@
+# Ignore all files with the .ignore extension
+*.ignore
+# Ignore all files starting with a dot (hidden files)
+.*
+# Except for .gitignore itself and .env files
+!.gitignore
+!.env
+
+# ignore cache
+__pycache__

@@ -14,8 +14,8 @@ class UserRegister(BaseModel):  # pydantic: BaseModel is a class that provides d
     email: EmailStr     # pydantic: premade type for email validation
     password: str = Field(max_length=10)
     @field_validator("email")  # pydantic: any time the email field is set, this function will be called to validate it
-    @classmethod               # 
-    def check_student_email(cls, email: str) -> str:
+    @classmethod
+    def chk_student_email(cls, email: str) -> str:  # check student email
         if not (STUDENT_EMAIL.fullmatch(email) or FACULTY_EMAIL.fullmatch(email)):
             raise ValueError("must be a CSN email address")
         return email
@@ -29,6 +29,8 @@ class UserLogin(BaseModel):
     email: EmailStr  # Emails have UNIQUE constraint, so can be used as an identifier
     password: str = Field(max_length=10)
 
+
+# as far as I can tell, these are unused.
 class ForgotPassword(BaseModel):
     email: EmailStr
 

@@ -1,7 +1,7 @@
 from urllib.parse import quote_plus
 
 from flask import Flask  # web framework
-from flask_sqlalchemy import SQLAlchemy  # 
+from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 import os
 from dotenv import find_dotenv, load_dotenv
@@ -59,7 +59,7 @@ def create_app():
     db.init_app(app)
 
     with app.app_context():
-        from .models import User
+        from .models import Users
         db.create_all()
 
     return app

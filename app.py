@@ -1,17 +1,34 @@
+# libraries
 from flask import render_template, request, jsonify, session, redirect, url_for
 from pydantic import ValidationError
+from functools import wraps # adds a wrapper so we can redirect if not logged in
+from sqlalchemy import func, and_
+# import secrets -- UNUSED
 
+# project files
 from project import create_app, db  # call create_app funct and db obj from project/__init__.py
-from project.models import User     # 
-from auth_schemas import UserRegister, UserLogin, TokenResponse
+from project.models import Campus, Rooms, Users, Exams, Sessions, Registrations
+from schemas_auth import UserRegister, UserLogin, TokenResponse
 
-import secrets
 
 app = create_app()
+
+# Login-checking function
+def login_required(view):
+    # "view" is chosen because flask calls the route functions "view" functions
+    # 
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if 'user_id' not in session:  # if the user ID is not in a session cookie
+            return redirect(url_for('Index'))  # redirect home
+        return view(*args, **kwargs)
+    return wrapped
 
 # flask.route: connects url to a function that will handle requests to that url
 @app.route('/', methods=['GET'])
 def Index():
+    print(db.session.scalar(db.text("SELECT DATABASE()")))
+    print(db.session.execute(db.text("DESCRIBE exam_sessions")).all())
     return render_template('index.html')
 
 @app.route('/about', methods=['GET'])
@@ -21,6 +38,7 @@ def about_page():
 @app.route('/contact', methods=['GET'])
 def contact_page():
     return jsonify({'message': 'Contact!'})
+
 
 
 # THIS LOGIN/REGISTRATION PAGES & FUNCTIONS ARE VERY VIBE-CODED, VALIDATE US!!!!
@@ -39,12 +57,12 @@ def login():
         return jsonify(e.errors(include_context=False)), 400
 
     # searches for user in the database
-    user = db.session.scalar(db.select(User).filter_by(email=data.email))
+    user = db.session.scalar(db.select(Users).filter_by(email=data.email))
     # if the user is not found or the password is incorrect, return a 401 error
     if not user or user.password != data.password:
         return jsonify(error="Incorrect email or password"), 401
 
-    session['user_id'] = user.user_id    
+    session['user_id'] = user.user_id  # stores the user_id in the session cookie, which is used to track the logged-in user
     return jsonify(message="Logged in"), 200
 
 @app.route('/logout')
@@ -60,20 +78,57 @@ def register_page():
 def register():
     try:
         data = UserRegister.model_validate(request.get_json())
+    # pydantic: ValidationError is raised when the data does not match the model's schema
     except ValidationError as e:
         return jsonify(e.errors(include_context=False)), 400
 
-    if db.session.scalar(db.select(User).filter_by(email=data.email)):
+    if db.session.scalar(db.select(Users).filter_by(email=data.email)):
         return jsonify(error="That email is already registered"), 409
 
     student_id = data.email.split("@")[0]           # the 10 digits before @student.csn.edu
 
-    user = User(first_name=data.first_name, last_name=data.last_name, email=data.email, 
-                password=data.password)
+    user = Users(first_name=data.first_name, last_name=data.last_name, email=data.email, 
+                 password=data.password)
     db.session.add(user)
     db.session.commit()
     return jsonify(message="Account created"), 201
 
+
+
+# Exam Registration pages
+@app.route('/exams', methods=['GET'])
+@login_required # redirect to home page to login and register
+def exam_selection():
+    # creates an SQL Alchemy query to run
+    query = (
+        db.select(
+            # select session IDs & registration counts
+            Sessions,
+            func.count(Registrations.session_id).label('taken'),
+        )
+        .outerjoin(
+            Registrations,
+            and_(
+                Registrations.session_id == Sessions.session_id,
+                Registrations.status == 'Active',
+            ),
+        )
+    .group_by(Sessions.session_id)
+    # filter out results with 20 registrations or more (can't register what you can't see)
+    .having(func.count(Registrations.session_id) < Sessions.capacity)
+    )
+    rows = db.session.execute(query).all()  # .all makes a list of ordered pairs (session_id, taken)
+    return render_template('exams.html', rows=rows)
+
+
+    
+# REGISTRATION IS NOT DONE
+# @app.route('/exams', methods=['POST'])
+# @login_required
+# def exam_registration():
+#     # read session ID
+#     data = request.get_json
+#     user_id = session['user_id']
 
 
 if __name__ == '__main__':
