@@ -25,7 +25,6 @@ class Campus(db.Model):
     state = db.Column(db.String(2), nullable=False)
     address = db.Column(db.String(255), nullable=False)
     zip = db.Column(db.String(5), nullable=False)
-    created_at = db.Column(db.DateTime, server_default=db.text("CURRENT_TIMESTAMP"))
     
     __table_args__ = (
         db.UniqueConstraint("city", "state", "address", name="uq_campus_location"),
@@ -52,7 +51,7 @@ class Rooms(db.Model):
     )
 
     def __repr__(self):
-        return f"<Room {self.room_number} at campus {self.campus_id}>"
+        return f"<Room {self.room_num} at campus {self.campus_id}>"
 
 
 
@@ -121,6 +120,7 @@ class Sessions(db.Model):
     __table_args__ = (
         db.ForeignKeyConstraint(["exam_id"], ["exams.exam_id"], name="fk_sessions_exam"),
         db.ForeignKeyConstraint(["room_id"], ["rooms.room_id"], name="fk_sessions_room"),
+        db.ForeignKeyConstraint(["proctor_id"], ["users.user_id"], name="fk_session_proctor"),
         db.UniqueConstraint("exam_id", "exam_date", "exam_time", name="uq_session"),
     )
 
@@ -135,15 +135,15 @@ class Registrations(db.Model):
     __tablename__ = "registrations"
 
     registration_id = db.Column(INTEGER(unsigned=True), primary_key=True, autoincrement=True)
-    user_id = db.Column(INTEGER(unsigned=True), nullable=False)
+    student_id = db.Column(INTEGER(unsigned=True), nullable=False)
     session_id = db.Column(INTEGER(unsigned=True), nullable=False)
     status = db.Column(db.Enum("Active", "Cancelled", "Complete"), nullable=False, server_default="Active")
     registered_at = db.Column(db.DateTime, server_default=db.text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
-        db.ForeignKeyConstraint(["user_id"], ["users.user_id"], name="fk_registrations_student"),
-        db.ForeignKeyConstraint(["session_id"], ["sessions.session_id"], name="fk_registrations_session"),
-        db.UniqueConstraint("user_id", "session_id", name="no_duplicate_session"),
+        db.ForeignKeyConstraint(["student_id"], ["users.user_id"], name="fk_registrations_student"),
+        db.ForeignKeyConstraint(["session_id"], ["exam_sessions.session_id"], name="fk_registrations_session"),
+        db.UniqueConstraint("student_id", "session_id", name="no_duplicate_session"),
     )
 
     def __repr__(self):

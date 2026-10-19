@@ -1,3 +1,6 @@
+# THIS HAS NOT BEEN UPDATED WITH DATABASE CHANGES! DNU!
+
+'''
 """
 setup_exam_db.py
 
@@ -492,3 +495,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''

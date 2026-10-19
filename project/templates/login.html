@@ -65,7 +65,7 @@
 
       if (res.ok) {                                      // 200 OK
         showStatus((body && body.message) || 'Logged in');
-        setTimeout(() => { window.location.href = "{{ url_for('Index') }}"; }, 1000);
+        setTimeout(() => { window.location.href = "{{ url_for('exam_selection') }}"; }, 1000);
       } else if (res.status === 400 && Array.isArray(body)) {   // Pydantic validation errors
         showErrors(body.map(e => `${e.loc.join('.')}: ${e.msg}`));
       } else if (body && body.error) {                   // 401: {error: "..."}

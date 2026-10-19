@@ -1,44 +1,169 @@
 {% extends "base.html" %}
 
-{% block title %}Exam sessions | CSN Exam Registration Portal{% endblock %}
+{% block title %}Exam sessions{% endblock %}
 
 {% block content %}
-  <section>
-    <h1>Exam sessions</h1>
-    <p class="lead">{{ rows|length }} session{{ '' if rows|length == 1 else 's' }} available.</p>
+<section class="exam-list">
+  <h1>Exam sessions</h1>
 
-    {% if rows %}
-      {# tabindex="0" lets keyboard users scroll this region with the arrow keys #}
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Exam sessions list">
-        <table class="exam-table">
-          <thead>
-            <tr>
-              <th scope="col">Exam</th>
-              <th scope="col">Date</th>
-              <th scope="col">Time</th>
-              <th scope="col">Location</th>
-              <th scope="col">Seats left</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for exam, taken in rows %}
-              {% set left = exam.capacity - taken %}
-              <tr>
-                <td>{{ exam.exam_name }}</td>
-                <td>{{ exam.exam_date }}</td>
-                <td>{{ exam.exam_time }}</td>
-                <td>{{ exam.location }}</td>
-                <td>
-                  {% if left > 0 %}{{ left }} of {{ exam.capacity }}
-                  {% else %}<strong>Full</strong>{% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+  {% if rows %}
+  <ul class="exam-list__items">
+    {# Each row is (session, exam, room, campus, proctor, taken), matching the select() order in exam_selection() #}
+    {% for s, exam, room, campus, proctor, taken in rows %}
+    {% set full = taken >= s.capacity %}
+    {% set registered = s.session_id in registered_ids %}
+    <li class="exam-entry">
+      <div class="exam-entry__main">
+        <h2 class="exam-entry__name">{{ exam.exam_name }}</h2>
+
+        <dl class="exam-entry__facts">
+          <div><dt>Subject</dt><dd>{{ exam.subject }}</dd></div>
+          <div><dt>Level</dt><dd>{{ exam.exam_level }}</dd></div>
+          <div><dt>Date</dt><dd>{{ s.exam_date.strftime('%A, %B %d, %Y') }}</dd></div>
+          <div><dt>Time</dt><dd>{{ s.exam_time.strftime('%I:%M %p').lstrip('0') }}</dd></div>
+          <div><dt>Proctor</dt><dd>{{ proctor.first_name }} {{ proctor.last_name }}</dd></div>
+          <div>
+            <dt>Seats taken</dt>
+            <dd><span class="seats-taken">{{ taken }}</span> of {{ s.capacity }}</dd>
+          </div>
+        </dl>
+
+        <details class="exam-entry__more">
+          <summary>Description and campus details</summary>
+          <div class="exam-entry__more-body">
+            <p>{{ exam.description or 'No description provided.' }}</p>
+            <address>
+              {{ campus.name }}<br>
+              {{ campus.address }}<br>
+              {{ campus.city }}, {{ campus.state }} {{ campus.zip }}
+            </address>
+          </div>
+        </details>
       </div>
-    {% else %}
-      <p>No exam sessions have been scheduled yet.</p>
-    {% endif %}
-  </section>
+
+      <div class="exam-entry__action">
+        <dl class="exam-entry__location">
+          <div><dt>Campus</dt><dd>{{ campus.name }}</dd></div>
+          <div><dt>Building</dt><dd>{{ room.building }}</dd></div>
+          <div><dt>Room</dt><dd>{{ room.room_num }}</dd></div>
+        </dl>
+        <button type="button"
+                class="exam-register{% if full or registered %} exam-register--off{% endif %}"
+                data-session-id="{{ s.session_id }}"
+                {% if full or registered %}disabled{% endif %}>
+          {% if registered %}Registered{% elif full %}Full{% else %}Register{% endif %}
+        </button>
+        <p class="exam-entry__status" role="status" aria-live="polite">{% if registered %}You’re registered for this session.{% endif %}</p>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No exam sessions are available right now. Check back later.</p>
+  {% endif %}
+</section>
+
+<style>
+  /* Everything is scoped under .exam-list / .exam-entry so it won't fight your site CSS.
+     Fonts and text color are inherited from the rest of the site. */
+  .exam-list { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem; }
+  .exam-list__items { list-style: none; margin: 0; padding: 0; }
+
+  .exam-entry {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem 2rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+  }
+  .exam-entry:first-child { border-top: 1px solid rgba(128, 128, 128, 0.4); }
+
+  .exam-entry__name { margin: 0 0 0.75rem; font-size: 1.25rem; }
+
+  .exam-entry__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.6rem 1.5rem;
+    margin: 0;
+  }
+  .exam-entry__facts dt { font-size: 0.85rem; opacity: 0.7; }
+  .exam-entry__facts dd { margin: 0; font-weight: 600; }
+
+  .exam-entry__more { margin-top: 1rem; }
+  .exam-entry__more summary { cursor: pointer; font-weight: 600; }
+  .exam-entry__more-body { padding: 0.75rem 0 0 1rem; max-width: 40rem; }
+  .exam-entry__more-body address { font-style: normal; margin-top: 0.75rem; }
+
+  .exam-entry__action { align-self: start; text-align: right; min-width: 9rem; max-width: 16rem; }
+  .exam-entry__location { margin: 0 0 1rem; }
+  .exam-entry__location div { margin-bottom: 0.5rem; }
+  .exam-entry__location dt { font-size: 0.85rem; opacity: 0.7; }
+  .exam-entry__location dd { margin: 0; font-weight: 600; }
+  .exam-register { padding: 0.6rem 1.4rem; font: inherit; font-weight: 600; cursor: pointer; }
+  /* Disabled = already registered, session full, or request in progress.
+     Written with extra specificity so site-wide button/hover styles can't override the grey. */
+  .exam-list .exam-register:disabled,
+  .exam-list .exam-register:disabled:hover,
+  .exam-list .exam-register--off,
+  .exam-list .exam-register--off:hover {
+    background: #d4d4d4;
+    color: #6b6b6b;
+    border: 1px solid #bdbdbd;
+    box-shadow: none;
+    opacity: 1;
+    pointer-events: none;   /* the mouse ignores it: no hover, no click, no pointer cursor */
+    user-select: none;      /* the label can't be highlighted */
+  }
+  .exam-register:focus-visible,
+  .exam-entry__more summary:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+  .exam-entry__status { margin: 0.5rem 0 0; font-size: 0.9rem; min-height: 1.2em; }
+
+  @media (max-width: 600px) {
+    .exam-entry { grid-template-columns: 1fr; }
+    .exam-entry__action { text-align: left; }
+  }
+</style>
+
+<script>
+  // Runs in the browser. For each Register button: send the session_id to Flask as JSON,
+  // then show the message (or error) that the Flask route sent back.
+  document.querySelectorAll('.exam-register').forEach(function (button) {
+    button.addEventListener('click', async function () {
+      if (button.classList.contains('exam-register--off')) return;   // already registered or full
+      const entry = button.closest('.exam-entry');
+      const status = entry.querySelector('.exam-entry__status');
+      button.disabled = true;           // prevents double-clicks while waiting
+      status.textContent = '';
+
+      try {
+        const response = await fetch('/exams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: Number(button.dataset.sessionId) }),
+        });
+
+        if (response.status === 401) {  // logged out: send them to the home page
+          window.location.href = "{{ url_for('Index') }}";
+          return;
+        }
+
+        const result = await response.json();
+
+        if (response.ok) {
+          status.textContent = result.message;
+          button.textContent = 'Registered';   // stays disabled
+          button.classList.add('exam-register--off');
+          const taken = entry.querySelector('.seats-taken');
+          taken.textContent = Number(taken.textContent) + 1;
+        } else {
+          status.textContent = result.error;
+          button.disabled = false;
+        }
+      } catch (error) {
+        status.textContent = 'Could not reach the server. Please try again.';
+        button.disabled = false;
+      }
+    });
+  });
+</script>
 {% endblock %}

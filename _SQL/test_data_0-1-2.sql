@@ -1,7 +1,7 @@
 USE exam_registration;
 
 -- campus
-INSERT INTO campus (name, address, city, state, zip, location_phone)
+INSERT INTO campuses (name, address, city, state, zip, location_phone)
 	VALUES ('Charleston Campus', '6375 W Charleston Blvd', 'Las Vegas', 'NV', '89146', '(702) 651-5000');
 
 -- room

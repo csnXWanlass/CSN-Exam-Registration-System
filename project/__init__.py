@@ -58,9 +58,12 @@ def create_app():
     print("URI set:", 'SQLALCHEMY_DATABASE_URI' in app.config, flush=True)
     db.init_app(app)
 
-    with app.app_context():
-        from .models import Users
-        db.create_all()
+    # This block creates a table if it doesn't exist in the database. Please do not use this.
+    # USE THE SUPPLIED SQL!
+    
+    # with app.app_context():
+    #     from .models import Users
+    #     db.create_all()
 
     return app
 

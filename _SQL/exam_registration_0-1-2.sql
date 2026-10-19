@@ -1,8 +1,11 @@
 -- ============================================
 -- EXAM REGISTRATION SYSTEM
--- Version 0.1.1
+-- Version 0.1.2
 -- ============================================
 -- changelog:
+--  0.1.2
+--  * "campus" changed to "campuses"
+--  0.1.1:
 --  *added version control
 --  *split exam_sessions.exam_date into date/time columns
 --  *altered order of campus columns to match address forms
@@ -32,7 +35,7 @@ USE exam_registration;
 -- 1. CAMPUS
 -- ============================================
 
-CREATE TABLE campus (
+CREATE TABLE campuses (
     campus_id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) UNIQUE NOT NULL,
     address VARCHAR(255) NOT NULL,
@@ -58,7 +61,7 @@ CREATE TABLE rooms (
 
     CONSTRAINT fk_room_campus
         FOREIGN KEY (campus_id)
-        REFERENCES campus(campus_id)
+        REFERENCES campuses(campus_id)
         ON DELETE CASCADE,
     CONSTRAINT uq_room UNIQUE (campus_id, building, room_num)
 );
@@ -315,7 +318,7 @@ FROM exam_sessions es
         ON es.exam_id = e.exam_id
     JOIN rooms r
         ON es.room_id = r.room_id
-    JOIN campus c
+    JOIN campuses c
         ON r.campus_id = c.campus_id
     LEFT JOIN registrations reg
         ON es.session_id = reg.session_id
