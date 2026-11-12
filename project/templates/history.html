@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}My reservations{% endblock %}
+
+{% block content %}
+<section class="history">
+  <h1>My reservations</h1>
+  <p class="history__intro">Search the exams you have booked. Leave everything blank to see them all.</p>
+
+  <form class="history__form" id="history-form">
+    <div class="history__field">
+      <label for="q">Exam name, subject or level</label>
+      <input type="search" id="q" name="q" placeholder="For example: CIT or 260">
+    </div>
+
+    <div class="history__field">
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="">Any status</option>
+        <option value="Active">Active</option>
+        <option value="Cancelled">Cancelled</option>
+        <option value="Complete">Complete</option>
+      </select>
+    </div>
+
+    <div class="history__field">
+      <label for="date_from">Exam date from</label>
+      <input type="date" id="date_from" name="date_from">
+    </div>
+
+    <div class="history__field">
+      <label for="date_to">Exam date to</label>
+      <input type="date" id="date_to" name="date_to">
+    </div>
+
+    <div class="history__buttons">
+      <button type="submit" class="history__search">Search</button>
+      <button type="button" class="history__clear" id="history-clear">Clear</button>
+    </div>
+  </form>
+
+  {# Screen readers announce changes here (result counts and errors) #}
+  <p class="history__message" id="history-message" role="status" aria-live="polite"></p>
+
+  <ul class="history__items" id="history-items"></ul>
+</section>
+
+<style>
+  /* Everything is scoped under .history so it won't fight your site CSS.
+     Colors come from the variables in style.css (--brand, --line, and so on). */
+  .history { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem; }
+  .history h1 { font-size: clamp(1.8rem, 4vw, 2.4rem); }
+  .history__intro { margin-top: 0.75rem; color: var(--ink-soft); }
+
+  .history__form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 1rem 1.5rem;
+    margin-top: 1.75rem;
+    padding: 1.25rem;
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .history__field { display: grid; gap: 0.3rem; align-content: start; }
+  .history__field label { font-weight: 700; }
+  .history__field input,
+  .history__field select {
+    width: 100%;      /* fill the column instead of spilling into the next one */
+    min-width: 0;
+    font: inherit;
+    padding: 0.55rem 0.7rem;
+    border: 2px solid var(--line);
+    border-radius: 4px;
+    background: var(--white);
+    color: var(--ink);
+  }
+  .history__field input:focus-visible,
+  .history__field select:focus-visible { border-color: var(--brand); }
+
+  .history__buttons { display: flex; gap: 0.75rem; align-items: end; }
+  .history__search,
+  .history__clear {
+    font: inherit;
+    font-weight: 700;
+    padding: 0.6rem 1.4rem;
+    border-radius: 4px;
+    border: 2px solid var(--brand);
+    cursor: pointer;
+  }
+  .history__search { background: var(--brand); color: var(--white); }
+  .history__search:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+  .history__clear { background: transparent; color: var(--brand); }
+  .history__clear:hover { background: var(--white); }
+
+  .history__message { margin: 1.25rem 0 0; min-height: 1.6em; color: var(--ink-soft); }
+  .history__message--error {
+    padding: 0.75rem 1rem;
+    background: #fdeceb;
+    border-left: 4px solid #b3261e;
+    color: #7a1a14;
+  }
+
+  .history__items { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+  .history-entry {
+    display: grid;
+    grid-template-columns: 1fr 13rem;  /* fixed side column keeps every row's facts lined up */
+    gap: 1rem 2rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .history-entry:first-child { border-top: 1px solid var(--line); }
+  .history-entry__name { margin: 0 0 0.75rem; font-size: 1.25rem; }
+
+  .history-entry__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.6rem 1.5rem;
+    margin: 0;
+  }
+  .history-entry__facts dt { font-size: 0.85rem; opacity: 0.7; }
+  .history-entry__facts dd { margin: 0; font-weight: 600; }
+
+  .history-entry__side { align-self: start; text-align: right; }
+  .history-badge {
+    display: inline-block;
+    padding: 0.25rem 0.8rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border: 1px solid transparent;
+  }
+  .history-badge--Active    { background: #e8f3ea; color: #1b4d1f; border-color: #2e7d32; }
+  .history-badge--Cancelled { background: #fdeceb; color: #7a1a14; border-color: #b3261e; }
+  .history-badge--Complete  { background: #e6ecf7; color: var(--brand-dark); border-color: var(--brand); }
+  .history-entry__booked { margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--ink-soft); }
+
+  /* Cancel button: red outline so it reads as a "careful" action */
+  .history-entry__cancel {
+    margin-top: 0.75rem;
+    font: inherit;
+    font-weight: 700;
+    padding: 0.45rem 1rem;
+    border-radius: 4px;
+    border: 2px solid #b3261e;
+    background: transparent;
+    color: #7a1a14;
+    cursor: pointer;
+  }
+  .history-entry__cancel:hover { background: #fdeceb; }
+  .history-entry__cancel:disabled { opacity: 0.6; cursor: default; }
+
+  @media (max-width: 600px) {
+    .history-entry { grid-template-columns: 1fr; }
+    .history-entry__side { text-align: left; }
+  }
+</style>
+
+<script>
+  // Runs in the browser. When the form is submitted, ask Flask for the student's
+  // reservations (GET /api/registrations with the filters in the web address),
+  // then build one list item per reservation from the JSON that comes back.
+
+  const form = document.getElementById('history-form');
+  const list = document.getElementById('history-items');
+  const message = document.getElementById('history-message');
+
+  // "2026-10-14" -> "Wednesday, October 14, 2026".
+  // The date is split by hand because new Date("2026-10-14") is read as UTC and can show the day before.
+  function formatDate(text) {
+    const [year, month, day] = text.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+  }
+
+  // "18:00:00" -> "6:00 PM"
+  function formatTime(text) {
+    const [hours, minutes] = text.split(':').map(Number);
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const twelveHour = hours % 12 === 0 ? 12 : hours % 12;
+    return twelveHour + ':' + String(minutes).padStart(2, '0') + ' ' + suffix;
+  }
+
+  // Makes one <div><dt>label</dt><dd>value</dd></div> row for the facts list.
+  // textContent (not innerHTML) is used everywhere so exam text can never run as HTML.
+  function fact(label, value) {
+    const row = document.createElement('div');
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value;
+    row.append(dt, dd);
+    return row;
+  }
+
+  // Builds the <li> for one reservation
+  function buildEntry(item) {
+    const li = document.createElement('li');
+    li.className = 'history-entry';
+
+    const main = document.createElement('div');
+    const name = document.createElement('h2');
+    name.className = 'history-entry__name';
+    name.textContent = item.exam_name;
+
+    const facts = document.createElement('dl');
+    facts.className = 'history-entry__facts';
+    facts.append(
+      fact('Subject', item.subject),
+      fact('Level', item.exam_level || 'None'),
+      fact('Date', formatDate(item.exam_date)),
+      fact('Time', formatTime(item.exam_time)),
+      fact('Campus', item.campus),
+      fact('Building', item.building),
+      fact('Room', item.room_num),
+      fact('Address', item.address),
+    );
+    main.append(name, facts);
+
+    const side = document.createElement('div');
+    side.className = 'history-entry__side';
+    const badge = document.createElement('span');
+    badge.className = 'history-badge history-badge--' + item.status;
+    badge.textContent = item.status;
+    side.append(badge);
+    if (item.registered_at) {
+      const booked = document.createElement('p');
+      booked.className = 'history-entry__booked';
+      booked.textContent = 'Booked ' + new Date(item.registered_at).toLocaleDateString('en-US', {
+        year: 'numeric', month: 'short', day: 'numeric',
+      });
+      side.append(booked);
+    }
+
+    // Only Active reservations can be cancelled
+    if (item.status === 'Active') {
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'history-entry__cancel';
+      cancel.textContent = 'Cancel reservation';
+      // Screen readers read this instead of the text, so each button says which exam it is for
+      cancel.setAttribute('aria-label', 'Cancel reservation for ' + item.exam_name);
+      cancel.addEventListener('click', function () {
+        cancelReservation(item, cancel);
+      });
+      side.append(cancel);
+    }
+
+    li.append(main, side);
+    return li;
+  }
+
+  function showMessage(text, isError) {
+    message.textContent = text;
+    message.classList.toggle('history__message--error', Boolean(isError));
+  }
+
+  // Asks Flask for the reservations that match the form and fills in the list
+  async function search() {
+    // Only send the filters the student actually filled in
+    const params = new URLSearchParams();
+    new FormData(form).forEach(function (value, key) {
+      if (value) params.set(key, value);
+    });
+
+    list.replaceChildren();
+    showMessage('Searching...', false);
+
+    try {
+      const response = await fetch('/api/registrations?' + params.toString());
+
+      if (response.status === 401) {  // logged out: send them to the home page
+        window.location.href = "{{ url_for('Index') }}";
+        return;
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {  // 400 (bad filter) or 403 (faculty): show the message Flask sent
+        showMessage(result.error || 'Something went wrong. Please try again.', true);
+        return;
+      }
+
+      if (result.count === 0) {
+        showMessage('No reservations match your search.', false);
+        return;
+      }
+
+      showMessage(result.count + (result.count === 1 ? ' reservation found.' : ' reservations found.'), false);
+      result.registrations.forEach(function (item) {
+        list.append(buildEntry(item));
+      });
+    } catch (error) {
+      showMessage('Could not reach the server. Please try again.', true);
+    }
+  }
+
+  // Cancels one reservation: ask first, send the cancel request to Flask,
+  // then reload the list so the row shows its new status.
+  async function cancelReservation(item, button) {
+    // Ask first so a stray click can't cancel an exam
+    const when = formatDate(item.exam_date) + ' at ' + formatTime(item.exam_time);
+    if (!window.confirm('Cancel your reservation for ' + item.exam_name + ' on ' + when + '?')) {
+      return;
+    }
+
+    button.disabled = true;  // prevents double-clicks while waiting
+
+    try {
+      const response = await fetch('/api/registrations/' + item.registration_id + '/cancel', {
+        method: 'POST',
+      });
+
+      if (response.status === 401) {  // logged out: send them to the home page
+        window.location.href = "{{ url_for('Index') }}";
+        return;
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {  // 404, 409 and so on: show the message Flask sent
+        showMessage(result.error || 'Something went wrong. Please try again.', true);
+        button.disabled = false;
+        return;
+      }
+
+      // Reload the list with the same filters, then confirm what happened.
+      // The message is set after the reload because the reload writes its own message.
+      await search();
+      showMessage(result.message, false);
+    } catch (error) {
+      showMessage('Could not reach the server. Please try again.', true);
+      button.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();  // stay on the page instead of reloading it
+    search();
+  });
+
+  document.getElementById('history-clear').addEventListener('click', function () {
+    form.reset();
+    search();
+  });
+
+  search();  // show the whole history as soon as the page opens
+</script>
+{% endblock %}

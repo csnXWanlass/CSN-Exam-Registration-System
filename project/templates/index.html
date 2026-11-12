@@ -1,39 +1,39 @@
 {% extends "base.html" %}
 
-{% block title %}Register for exams | CSN Exam Registration Portal{% endblock %}
+{% block title %}CSN Exam Registration Portal{% endblock %}
 
 {% block content %}
-  <section class="hero">
-    <h1>Pick your exam session and reserve a seat.</h1>
-    <p class="lead">
-      Students and faculty sign in with their CSN email. Browse open sessions,
-      register in a few clicks, and see your upcoming exams in one place.
-    </p>
-    {% if session.get('user_id') %}
-      <p class="lead">You're logged in.</p>
-    {% else %}
-      <div class="actions">
-        <a class="btn btn-primary" href="{{ url_for('register_page') }}">Create account</a>
-        <a class="btn btn-secondary" href="{{ url_for('login_page') }}">Log in</a>
-      </div>
-    {% endif %}
-  </section>
+<section class="hero">
+  <h1>Register for your CSN exam</h1>
+  <p class="lead">Pick an exam session, book your seat, and manage your reservations in one place.</p>
 
-  <section class="steps" aria-labelledby="steps-heading">
-    <h2 id="steps-heading">How registration works</h2>
-    <ol>
-      <li>
-        <h3>Create an account</h3>
-        <p>Use your CSN email address. Your role is set from it automatically.</p>
-      </li>
-      <li>
-        <h3>Choose a session</h3>
-        <p>Open sessions show the date, time, and how many seats are left.</p>
-      </li>
-      <li>
-        <h3>Confirm your seat</h3>
-        <p>Registered exams appear on your dashboard so you know when to show up.</p>
-      </li>
-    </ol>
-  </section>
+  {# The buttons change depending on whether the user is signed in (session['user_id'] is set by the /login route) #}
+  <div class="actions">
+    {% if session.get('user_id') %}
+      <a class="btn btn-primary" href="{{ url_for('exam_selection') }}">Browse exam sessions</a>
+      <a class="btn btn-secondary" href="{{ url_for('history_page') }}">My reservations</a>
+    {% else %}
+      <a class="btn btn-primary" href="{{ url_for('login_page') }}">Log in</a>
+      <a class="btn btn-secondary" href="{{ url_for('register_page') }}">Create account</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="steps">
+  <h2>How it works</h2>
+  <ol>
+    <li>
+      <h3>Log in</h3>
+      <p>Use your CSN email address and your NSHE number as the password.</p>
+    </li>
+    <li>
+      <h3>Choose a session</h3>
+      <p>Browse the open exam sessions and book a seat. You can book up to three different exams.</p>
+    </li>
+    <li>
+      <h3>Manage your reservations</h3>
+      <p>Search your reservation history, or cancel a booking from the My reservations page.</p>
+    </li>
+  </ol>
+</section>
 {% endblock %}

@@ -1,6 +1,6 @@
 from urllib.parse import quote_plus
 
-from flask import Flask  # web framework
+from flask import Flask, app  # web framework
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 import os
@@ -60,11 +60,14 @@ def create_app():
 
     # This block creates a table if it doesn't exist in the database. Please do not use this.
     # USE THE SUPPLIED SQL!
-    
+
     # with app.app_context():
     #     from .models import Users
     #     db.create_all()
 
+    login_manager.init_app(app)  # connect Flask-Login to the app
+
+    from .api import api  # imported here to avoid a circular import
+    app.register_blueprint(api)  # plug the /api routes into the app
+
     return app
-
-

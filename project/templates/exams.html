@@ -47,12 +47,28 @@
           <div><dt>Building</dt><dd>{{ room.building }}</dd></div>
           <div><dt>Room</dt><dd>{{ room.room_num }}</dd></div>
         </dl>
-        <button type="button"
+         <button type="button"
                 class="exam-register{% if full or registered %} exam-register--off{% endif %}"
                 data-session-id="{{ s.session_id }}"
+                data-exam-name="{{ exam.exam_name }}"
+                data-exam-when="{{ s.exam_date.strftime('%A, %B') }} {{ s.exam_date.day }} at {{ s.exam_time.strftime('%I:%M %p').lstrip('0') }}"
+                data-exam-where="{{ campus.name }}, Building {{ room.building }}, Room {{ room.room_num }}"
                 {% if full or registered %}disabled{% endif %}>
+                    
           {% if registered %}Registered{% elif full %}Full{% else %}Register{% endif %}
         </button>
+        <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
+                      <form method="dialog" class="confirm-dialog__body">
+                        <h2 class="confirm-dialog__title" id="confirm-title">Register for this exam?</h2>
+                        <p class="confirm-dialog__exam" id="confirm-exam"></p>
+                        <p class="confirm-dialog__detail" id="confirm-when"></p>
+                        <p class="confirm-dialog__detail" id="confirm-where"></p>
+                        <div class="confirm-dialog__actions">
+                          <button type="submit" value="cancel" class="confirm-dialog__cancel">Cancel</button>
+                          <button type="submit" value="confirm" class="confirm-dialog__ok">Register</button>
+                        </div>
+                      </form>
+                    </dialog>
         <p class="exam-entry__status" role="status" aria-live="polite">{% if registered %}You’re registered for this session.{% endif %}</p>
       </div>
     </li>
@@ -122,48 +138,106 @@
     .exam-entry { grid-template-columns: 1fr; }
     .exam-entry__action { text-align: left; }
   }
+
+    /* Confirmation popup */
+  .confirm-dialog {
+    width: min(26rem, calc(100vw - 2rem));
+    padding: 0;                       /* padding lives on the form, so a click on the dialog itself is a click outside */
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    border-radius: 8px;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  }
+  .confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+  .confirm-dialog__body { padding: 1.25rem 1.5rem 1.5rem; }
+  .confirm-dialog__title { margin: 0 0 0.75rem; font-size: 1.2rem; }
+  .confirm-dialog__exam { margin: 0 0 0.35rem; font-weight: 600; }
+  .confirm-dialog__detail { margin: 0; opacity: 0.8; }
+  .confirm-dialog__actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
+  .confirm-dialog__actions button { padding: 0.6rem 1.4rem; font: inherit; font-weight: 600; cursor: pointer; }
+  .confirm-dialog .confirm-dialog__cancel {
+    background: transparent;
+    color: inherit;
+    border: 1px solid rgba(128, 128, 128, 0.6);
+  }
+  .confirm-dialog__actions button:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
 </style>
 
 <script>
-  // Runs in the browser. For each Register button: send the session_id to Flask as JSON,
-  // then show the message (or error) that the Flask route sent back.
+  // Runs in the browser. Clicking Register opens the confirmation popup; only its Register
+  // button sends the session_id to Flask, then shows the message (or error) Flask sent back.
+  const dialog = document.getElementById('confirm-dialog');
+  let pendingButton = null;   // the Register button the popup is asking about
+
   document.querySelectorAll('.exam-register').forEach(function (button) {
-    button.addEventListener('click', async function () {
+    button.addEventListener('click', function () {
       if (button.classList.contains('exam-register--off')) return;   // already registered or full
-      const entry = button.closest('.exam-entry');
-      const status = entry.querySelector('.exam-entry__status');
-      button.disabled = true;           // prevents double-clicks while waiting
-      status.textContent = '';
 
-      try {
-        const response = await fetch('/exams', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: Number(button.dataset.sessionId) }),
-        });
-
-        if (response.status === 401) {  // logged out: send them to the home page
-          window.location.href = "{{ url_for('Index') }}";
-          return;
-        }
-
-        const result = await response.json();
-
-        if (response.ok) {
-          status.textContent = result.message;
-          button.textContent = 'Registered';   // stays disabled
-          button.classList.add('exam-register--off');
-          const taken = entry.querySelector('.seats-taken');
-          taken.textContent = Number(taken.textContent) + 1;
-        } else {
-          status.textContent = result.error;
-          button.disabled = false;
-        }
-      } catch (error) {
-        status.textContent = 'Could not reach the server. Please try again.';
-        button.disabled = false;
+      // Very old browsers have no <dialog>: fall back to the browser's own confirm box
+      if (typeof dialog.showModal !== 'function') {
+        if (window.confirm('Register for ' + button.dataset.examName + '?')) register(button);
+        return;
       }
+
+      pendingButton = button;
+      if (button.classList.contains('exam-register--off')) return;   // already registered or full
+      document.getElementById('confirm-exam').textContent = button.dataset.examName;
+      document.getElementById('confirm-when').textContent = button.dataset.examWhen;
+      document.getElementById('confirm-where').textContent = button.dataset.examWhere;
+      dialog.returnValue = '';   // forget the answer from last time
+      dialog.showModal();
     });
   });
+
+  // A click on the dark area around the popup works like Cancel
+  dialog.addEventListener('click', function (event) {
+    if (event.target === dialog) dialog.close('cancel');
+  });
+
+  // Runs however the popup closes: Register, Cancel, the Esc key, or a click outside
+  dialog.addEventListener('close', function () {
+    const button = pendingButton;
+    pendingButton = null;
+    if (dialog.returnValue === 'confirm' && button) register(button);
+  });
+
+  async function register(button) {
+    const entry = button.closest('.exam-entry');
+    const status = entry.querySelector('.exam-entry__status');
+    button.disabled = true;           // prevents double-clicks while waiting
+    status.textContent = '';
+
+    try {
+      const response = await fetch('/exams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: Number(button.dataset.sessionId) }),
+      });
+
+      if (response.status === 401) {  // logged out: send them to the home page
+        window.location.href = "{{ url_for('Index') }}";
+        return;
+      }
+
+      const result = await response.json();
+
+      if (response.ok) {
+        status.textContent = result.message;
+        button.textContent = 'Registered';   // stays disabled
+        button.classList.add('exam-register--off');
+        const taken = entry.querySelector('.seats-taken');
+        taken.textContent = Number(taken.textContent) + 1;
+      } else {
+        status.textContent = result.error;
+        button.disabled = false;
+      }
+    } catch (error) {
+      status.textContent = 'Could not reach the server. Please try again.';
+      button.disabled = false;
+    }
+  }
 </script>
 {% endblock %}
+
+
