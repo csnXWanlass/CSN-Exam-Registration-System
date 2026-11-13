@@ -1,8 +1,10 @@
 -- ============================================
 -- EXAM REGISTRATION SYSTEM
--- Version 0.1.2
+-- Version 0.1.3
 -- ============================================
 -- changelog:
+--  0.1.3
+--  * Added "status" column to sessions table
 --  0.1.2
 --  * "campus" changed to "campuses"
 --  0.1.1:
@@ -115,6 +117,8 @@ CREATE TABLE exam_sessions (
     exam_date DATE NOT NULL,
     exam_time TIME NOT NULL,
     capacity TINYINT UNSIGNED NOT NULL DEFAULT 20,
+    status ENUM('Active', 'Cancelled', 'Complete')
+        NOT NULL DEFAULT 'Active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_session_exam

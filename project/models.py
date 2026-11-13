@@ -114,7 +114,7 @@ class Sessions(db.Model):
     exam_date = db.Column(db.Date, nullable = False)
     exam_time = db.Column(db.Time, nullable = False)
     capacity = db.Column(TINYINT(unsigned=True), nullable = False, server_default="20")
-
+    status = db.Column(db.Enum("Active", "Cancelled", "Complete"), nullable=False, server_default="Active")
     created_at = db.Column(db.DateTime, server_default=db.text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (

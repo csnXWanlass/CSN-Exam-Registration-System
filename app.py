@@ -4,6 +4,7 @@ from flask_login import current_user
 from pydantic import ValidationError
 from functools import wraps # adds a wrapper so we can redirect if not logged in
 from sqlalchemy import func, and_
+from sqlalchemy.exc import SQLAlchemyError
 # import secrets -- UNUSED
 
 # project files
@@ -11,33 +12,12 @@ from project import create_app, db  # call create_app funct and db obj from proj
 from project.models import Campus, Rooms, Users, Exams, Sessions, Registrations
 from schemas_auth import UserRegister, UserLogin, TokenResponse
 
+from helpers import get_current_user, parse_date, login_required, role_required
+
 
 app = create_app()
 app.config['SQLALCHEMY_ECHO'] = True  # For debug, lets you see queries.
 
-
-## HELPERS ##
-
-# DECORATORS #
-def login_required(view):  # Redirect home if not logged in
-    # "view" is chosen because flask calls the route functions "view" functions
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if 'user_id' not in session:  # if the user ID is not in a session cookie
-            # if it's because user session expired
-            if request.method == 'POST':
-                return jsonify(error='Session expired. Please log in again.'), 401
-            return redirect(url_for('Index'))  # redirect home
-        return view(*args, **kwargs)
-    return wrapped
-
-# FUNCTIONS #
-def get_current_user():
-    """Return the logged-in Users row, or None if there's no login or the cookie is stale."""
-    user_id = session.get('user_id')
-    if user_id is None:
-        return None
-    return db.session.get(Users, int(user_id))
 
 
 # flask.route: connects url to a function that will handle requests to that url
@@ -260,7 +240,11 @@ def exam_registration():
     else:
         db.session.add(Registrations(student_id=user.user_id, session_id=session_id))
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify(error=str(e.orig)), 409
 
     ## END TRANSACION ##
     
@@ -270,9 +254,17 @@ def exam_registration():
 # Reservation history page. The page's JavaScript fills itself in
 # from the /api/registrations route in project/api.py.
 @app.route('/history', methods=['GET'])
-@login_required  # redirect to home page if not logged in
+@role_required('Student', True)
 def history_page():
     return render_template('history.html')
+
+@app.route('/reports', methods=['GET'])
+@role_required('Faculty', True)
+def reports_page():
+    return render_template('faculty_report_test.html')
+
+
+# Faculty reports page. This page also makes fetch calls to api.py
 
 if __name__ == '__main__':
     app.run(debug=True)
