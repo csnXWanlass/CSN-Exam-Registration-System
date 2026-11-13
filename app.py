@@ -267,6 +267,13 @@ def exam_registration():
     return jsonify(message='Registered!'), 201
 
 
+# Reservation history page. The page's JavaScript fills itself in
+# from the /api/registrations route in project/api.py.
+@app.route('/history', methods=['GET'])
+@login_required  # redirect to home page if not logged in
+def history_page():
+    return render_template('history.html')
+
 if __name__ == '__main__':
     app.run(debug=True)
 

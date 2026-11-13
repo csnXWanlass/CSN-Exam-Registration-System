@@ -21,7 +21,9 @@
 
       <nav aria-label="Main">
         {% if session.get('user_id') %}
-          <a class="nav-cta" href="{{ url_for('logout') }}">Log out</a>
+             <a href="{{ url_for('history_page') }}"
+      {% if request.endpoint == 'history_page' %}aria-current="page"{% endif %}>My reservations</a>
+        <a class="nav-cta" href="{{ url_for('logout') }}">Log out</a>
         {% else %}
           <a href="{{ url_for('login_page') }}"
              {% if request.endpoint == 'login_page' %}aria-current="page"{% endif %}>Log in</a>

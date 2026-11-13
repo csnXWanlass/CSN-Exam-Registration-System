@@ -9,7 +9,7 @@ rather than creating its own.
 from flask_login import UserMixin
 from sqlalchemy.dialects.mysql import INTEGER, TINYINT
 
-from . import db
+from . import db, login_manager
 # SQL Alchemy database models following examregistration v 0.1.1 schema
 
 
@@ -148,3 +148,9 @@ class Registrations(db.Model):
 
     def __repr__(self):
         return f"<Registration {self.registration_id} for user {self.user_id} and session {self.session_id}>"
+
+    @login_manager.user_loader
+    def load_user(user_id):
+       # Flask-Login passes the id saved in the session cookie;
+       # return the matching Users row, or None if it no longer exists
+       return db.session.get(Users, int(user_id))
