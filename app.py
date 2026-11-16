@@ -89,7 +89,9 @@ def register():
     if db.session.scalar(db.select(Users).filter_by(email=data.email)):
         return jsonify(error="That email is already registered"), 409
 
-    student_id = data.email.split("@")[0]           # the 10 digits before @student.csn.edu
+
+    # unused variable
+    # student_id = data.email.split("@")[0]           # the 10 digits before @student.csn.edu
 
     user = Users(first_name=data.first_name, last_name=data.last_name, email=data.email, 
                  password=data.password)
@@ -263,6 +265,11 @@ def history_page():
 def reports_page():
     return render_template('faculty_report_test.html')
 
+@app.route('/createsession', methods=['GET'])
+@role_required('Faculty', True)
+def create_session_page():
+    return render_template('create_session_test.html')
+
 
 # Faculty reports page. This page also makes fetch calls to api.py
 
@@ -270,6 +277,7 @@ if __name__ == '__main__':
     app.run(debug=True)
 
 """"
+
 Syntax:
 
 @app.get("/") Tells FastAPI that this function is the handler for GET requests to the root URL ("/").

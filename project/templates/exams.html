@@ -19,8 +19,8 @@
         <dl class="exam-entry__facts">
           <div><dt>Subject</dt><dd>{{ exam.subject }}</dd></div>
           <div><dt>Level</dt><dd>{{ exam.exam_level }}</dd></div>
-          <div><dt>Date</dt><dd>{{ s.exam_date.strftime('%A, %B %d, %Y') }}</dd></div>
-          <div><dt>Time</dt><dd>{{ s.exam_time.strftime('%I:%M %p').lstrip('0') }}</dd></div>
+          <div><dt>Date</dt><dd>{{ s.session_date.strftime('%A, %B %d, %Y') }}</dd></div>
+          <div><dt>Time</dt><dd>{{ s.session_time.strftime('%I:%M %p').lstrip('0') }}</dd></div>
           <div><dt>Proctor</dt><dd>{{ proctor.first_name }} {{ proctor.last_name }}</dd></div>
           <div>
             <dt>Seats taken</dt>
@@ -51,7 +51,7 @@
                 class="exam-register{% if full or registered %} exam-register--off{% endif %}"
                 data-session-id="{{ s.session_id }}"
                 data-exam-name="{{ exam.exam_name }}"
-                data-exam-when="{{ s.exam_date.strftime('%A, %B') }} {{ s.exam_date.day }} at {{ s.exam_time.strftime('%I:%M %p').lstrip('0') }}"
+                data-exam-when="{{ s.session_date.strftime('%A, %B') }} {{ s.session_date.day }} at {{ s.session_time.strftime('%I:%M %p').lstrip('0') }}"
                 data-exam-where="{{ campus.name }}, Building {{ room.building }}, Room {{ room.room_num }}"
                 {% if full or registered %}disabled{% endif %}>
                     

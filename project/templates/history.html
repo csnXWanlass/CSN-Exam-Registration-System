@@ -209,8 +209,8 @@
     facts.append(
       fact('Subject', item.subject),
       fact('Level', item.exam_level || 'None'),
-      fact('Date', formatDate(item.exam_date)),
-      fact('Time', formatTime(item.exam_time)),
+      fact('Date', formatDate(item.session_date)),
+      fact('Time', formatTime(item.session_time)),
       fact('Campus', item.campus),
       fact('Building', item.building),
       fact('Room', item.room_num),
@@ -300,7 +300,7 @@
   // then reload the list so the row shows its new status.
   async function cancelReservation(item, button) {
     // Ask first so a stray click can't cancel an exam
-    const when = formatDate(item.exam_date) + ' at ' + formatTime(item.exam_time);
+    const when = formatDate(item.session_date) + ' at ' + formatTime(item.session_time);
     if (!window.confirm('Cancel your reservation for ' + item.exam_name + ' on ' + when + '?')) {
       return;
     }

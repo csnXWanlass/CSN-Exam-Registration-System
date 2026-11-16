@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from functools import wraps # adds a wrapper so we can redirect if not logged in
 from flask import session, jsonify, redirect, url_for, request
@@ -23,6 +23,25 @@ def parse_date(text):
         return datetime.strptime(text, "%Y-%m-%d").date()
     except ValueError:
         return None
+
+def format_time(value: time) -> str:
+    """Turn military time format into a a string with AM / PM labels"""
+    return value.strftime("%I:%M %p").lstrip("0")   # 17:00 -> "5:00 PM"
+
+def validation_errors(e):
+    """Pass through pydantic validation errors as an array of dictionaries for the site to read."""
+    """Usage: jsonify(error=message, details=validation_errors(e), 000)"""
+    return [
+        {
+            # List the field name as a dot-separated location.
+            # Ex: building.room (Note: we have flat pydantic models, so this isn't really used)
+            "field": ".".join(str(part) for part in err["loc"]),
+
+            # Pass the error message with the "Value error" prefix removed.
+            "message": err["msg"].removeprefix("Value error, "),
+        }
+        for err in e.errors(include_context=False, include_url=False, include_input=False)
+    ]
 
 # DECORATORS #
 def login_required(view):

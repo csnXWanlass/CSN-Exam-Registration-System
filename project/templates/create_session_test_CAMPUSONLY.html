@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create session test (temporary)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 1.5rem auto; padding: 0 1rem; }
+    .step { margin: 1.5rem 0; }
+    label { display: block; font-weight: 600; margin-bottom: 0.3rem; }
+    input { font: inherit; padding: 0.4rem 0.5rem; width: 100%; box-sizing: border-box; }
+    input:disabled { opacity: 0.5; }
+    .error { color: #b00020; font-size: 0.9rem; min-height: 1.2em; margin: 0.25rem 0 0; }
+    @media (prefers-color-scheme: dark) { .error { color: #ff8a80; } }
+    ul.results { list-style: none; margin: 0.4rem 0 0; padding: 0; max-height: 12rem; overflow-y: auto;
+                 border: 1px solid rgba(128, 128, 128, 0.5); }
+    ul.results:empty { display: none; }
+    ul.results li + li { border-top: 1px solid rgba(128, 128, 128, 0.3); }
+    ul.results button { font: inherit; width: 100%; text-align: left; padding: 0.5rem 0.6rem; cursor: pointer;
+                        background: transparent; color: inherit; border: 0; }
+    ul.results button:hover, ul.results button:focus-visible { background: rgba(128, 128, 128, 0.2); }
+    .muted { opacity: 0.7; font-size: 0.85rem; }
+    .none { padding: 0.5rem 0.6rem; opacity: 0.7; }
+    #summary { padding: 0.75rem 1rem; border: 1px solid rgba(128, 128, 128, 0.5); margin: 1rem 0; }
+    #debug-info { font-family: ui-monospace, monospace; font-size: 0.85rem; margin: 0.5rem 0; }
+    pre { padding: 1rem; border: 1px solid rgba(128, 128, 128, 0.5); overflow: auto; max-height: 20rem; white-space: pre-wrap; }
+    button.reset { font: inherit; padding: 0.35rem 0.8rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Create session test</h1>
+  <p>Temporary page for trying the search-as-you-type on <code>/api/rooms</code>. Log in as a faculty member first. Delete this file when you’re done.</p>
+
+  <div id="summary" aria-live="polite">Nothing selected yet.</div>
+  <button type="button" class="reset" id="reset">Start over</button>
+
+  <div class="step">
+    <label for="campus">1. Campus</label>
+    <input type="text" id="campus" autocomplete="off" placeholder="Type part of a campus name">
+    <p class="error" id="campus-error"></p>
+    <ul class="results" id="campus-results"></ul>
+  </div>
+
+  <div class="step">
+    <label for="building">2. Building</label>
+    <input type="text" id="building" autocomplete="off" placeholder="Choose a campus first" disabled>
+    <p class="error" id="building-error"></p>
+    <ul class="results" id="building-results"></ul>
+  </div>
+
+  <div class="step">
+    <label for="room_num">3. Room</label>
+    <input type="text" id="room_num" autocomplete="off" placeholder="Choose a building first" disabled>
+    <p class="error" id="room_num-error"></p>
+    <ul class="results" id="room-results"></ul>
+  </div>
+
+  <h2>Last request</h2>
+  <div id="debug-info">No request yet.</div>
+  <pre id="debug-output">(the raw response will appear here)</pre>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+
+    // What the user has picked so far
+    const state = { campus: null, building: null, room: null };
+
+    const timers = {};        // one debounce timer per step
+    const controllers = {};   // one AbortController per step, so a step only cancels its own older request
+
+    // ---------- helpers ----------
+
+    function uniqueBy(items, keyFn) {
+      const seen = new Map();
+      for (const item of items) {
+        const key = keyFn(item);
+        if (!seen.has(key)) seen.set(key, item);
+      }
+      return [...seen.values()];
+    }
+
+    function debounce(step, fn) {
+      clearTimeout(timers[step]);
+      timers[step] = setTimeout(fn, 300);   // wait 300 ms after the last keystroke
+    }
+
+    function clearErrors() {
+      for (const id of ['campus-error', 'building-error', 'room_num-error']) el(id).textContent = '';
+    }
+
+    function showErrors(details) {
+      clearErrors();
+      for (const problem of details || []) {
+        const target = problem.field === 'campus_id' ? 'campus' : problem.field;
+        const box = el(target + '-error');
+        if (box) box.textContent += (box.textContent ? ' ' : '') + problem.message;
+      }
+    }
+
+    function showDebug(url, status, data, rawText) {
+      el('debug-info').textContent =
+        'GET ' + url + '  ->  HTTP ' + status + (data && data.count !== undefined ? '  (count: ' + data.count + ')' : '');
+      el('debug-output').textContent = data ? JSON.stringify(data, null, 2) : '(not JSON)\n\n' + rawText;
+    }
+
+    // Draw a clickable list. Uses textContent, so nothing typed or stored can inject HTML.
+    function renderList(listId, items, labelFn, subFn, onPick) {
+      const list = el(listId);
+      list.replaceChildren();
+      if (items === null) return;
+      if (items.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'none';
+        li.textContent = 'No matches';
+        list.append(li);
+        return;
+      }
+      for (const item of items) {
+        const li = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = labelFn(item);
+        if (subFn) {
+          const sub = document.createElement('div');
+          sub.className = 'muted';
+          sub.textContent = subFn(item);
+          button.append(sub);
+        }
+        button.addEventListener('click', () => onPick(item));
+        li.append(button);
+        list.append(li);
+      }
+    }
+
+    function updateSummary() {
+      const box = el('summary');
+      if (!state.campus) { box.textContent = 'Nothing selected yet.'; return; }
+      let text = 'Campus: ' + state.campus.name + ' (campus_id ' + state.campus.id + ')';
+      if (state.building) text += '   Building: ' + state.building;
+      if (state.room) text += '   Room: ' + state.room.room_num + ' (room_id ' + state.room.id + ')';
+      box.textContent = text;
+    }
+
+    // ---------- the one request function every step uses ----------
+
+    // Returns the list of rows, or null if the request failed or was cancelled.
+    async function fetchRooms(step, params) {
+      if (controllers[step]) controllers[step].abort();   // cancel this step's older request
+      controllers[step] = new AbortController();
+
+      const query = new URLSearchParams();
+      for (const [name, value] of Object.entries(params)) {
+        if (value !== '' && value !== null && value !== undefined) query.set(name, value);
+      }
+      const url = '/api/rooms' + (query.toString() ? '?' + query : '');
+
+      try {
+        const response = await fetch(url, { signal: controllers[step].signal });
+        const text = await response.text();
+        let data = null;
+        try { data = JSON.parse(text); } catch (parseError) { /* leave data as null */ }
+
+        showDebug(url, response.status, data, text);
+        clearErrors();
+
+        if (!response.ok) {
+          if (data && data.details) showErrors(data.details);
+          else if (data && data.error) {
+            const errorBox = { campus: 'campus-error', building: 'building-error', room: 'room_num-error' }[step];
+            el(errorBox).textContent = data.error;   // e.g. 401 or 403 messages
+          }
+          return null;
+        }
+        return data.roomsFound;
+      } catch (error) {
+        if (error.name === 'AbortError') return null;   // a newer request replaced this one
+        el('debug-info').textContent = 'GET ' + url + '  ->  request failed';
+        el('debug-output').textContent = String(error);
+        return null;
+      }
+    }
+
+    // ---------- step 1: campus ----------
+
+    async function searchCampus() {
+      const rows = await fetchRooms('campus', { campus: el('campus').value.trim() });
+      if (rows === null) return;
+      const campuses = uniqueBy(rows, (r) => r.c_id).map((r) => ({
+        id: r.c_id,
+        name: r.c_name,
+        address: r.c_address + ', ' + r.c_city + ', ' + r.c_state + ' ' + r.c_zip,
+      }));
+      renderList('campus-results', campuses, (c) => c.name, (c) => c.address, pickCampus);
+    }
+
+    function pickCampus(campus) {
+      state.campus = campus;
+      el('campus').value = campus.name;
+      el('campus-results').replaceChildren();
+      resetBuilding();
+      el('building').disabled = false;
+      el('building').placeholder = 'Type part of a building name';
+      el('building').focus();
+      updateSummary();
+      searchBuilding();
+    }
+
+    // ---------- step 2: building ----------
+
+    async function searchBuilding() {
+      if (!state.campus) return;
+      const rows = await fetchRooms('building', {
+        campus_id: state.campus.id,
+        building: el('building').value.trim(),
+      });
+      if (rows === null) return;
+      const buildings = uniqueBy(rows, (r) => r.r_building).map((r) => r.r_building).sort();
+      renderList('building-results', buildings, (b) => 'Building ' + b, null, pickBuilding);
+    }
+
+    function pickBuilding(building) {
+      state.building = building;
+      el('building').value = building;
+      el('building-results').replaceChildren();
+      resetRoom();
+      el('room_num').disabled = false;
+      el('room_num').placeholder = 'Type part of a room number';
+      el('room_num').focus();
+      updateSummary();
+      searchRoom();
+    }
+
+    // ---------- step 3: room ----------
+
+    async function searchRoom() {
+      if (!state.campus || !state.building) return;
+      const rows = await fetchRooms('room', {
+        campus_id: state.campus.id,
+        building: state.building,
+        room_num: el('room_num').value.trim(),
+      });
+      if (rows === null) return;
+      // The route matches building text with "contains", so keep only the exact building here
+      const rooms = rows
+        .filter((r) => r.r_building === state.building)
+        .map((r) => ({ id: r.r_id, building: r.r_building, room_num: r.r_room_num }));
+      renderList('room-results', rooms, (r) => 'Room ' + r.room_num, (r) => 'room_id ' + r.id, pickRoom);
+    }
+
+    function pickRoom(room) {
+      state.room = room;
+      el('room_num').value = room.room_num;
+      el('room-results').replaceChildren();
+      updateSummary();
+    }
+
+    // ---------- resetting later steps when an earlier one changes ----------
+
+    function resetBuilding() {
+      state.building = null;
+      el('building').value = '';
+      el('building-results').replaceChildren();
+      resetRoom();
+      el('room_num').disabled = true;
+      el('room_num').placeholder = 'Choose a building first';
+    }
+
+    function resetRoom() {
+      state.room = null;
+      el('room_num').value = '';
+      el('room-results').replaceChildren();
+    }
+
+    // ---------- wiring up the inputs ----------
+
+    el('campus').addEventListener('input', () => {
+      state.campus = null;              // typing again means the old pick no longer applies
+      resetBuilding();
+      el('building').disabled = true;
+      el('building').placeholder = 'Choose a campus first';
+      updateSummary();
+      debounce('campus', searchCampus);
+    });
+
+    el('building').addEventListener('input', () => {
+      state.building = null;
+      resetRoom();
+      el('room_num').disabled = true;
+      el('room_num').placeholder = 'Choose a building first';
+      updateSummary();
+      debounce('building', searchBuilding);
+    });
+
+    el('room_num').addEventListener('input', () => {
+      state.room = null;
+      updateSummary();
+      debounce('room', searchRoom);
+    });
+
+    el('reset').addEventListener('click', () => {
+      state.campus = null;
+      el('campus').value = '';
+      resetBuilding();
+      el('building').disabled = true;
+      el('building').placeholder = 'Choose a campus first';
+      clearErrors();
+      updateSummary();
+      searchCampus();
+    });
+
+    searchCampus();   // show every campus on load
+  </script>
+</body>
+</html>

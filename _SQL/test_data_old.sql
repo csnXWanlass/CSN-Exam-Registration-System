@@ -21,7 +21,7 @@ INSERT INTO exams (subject, exam_level, exam_name, description, created_at)
 	VALUES ('CIT', '260', 'Systems Development and Design Midterm', 'Midterm covering Dr. Coombs''s textbook through chapter 8', '2026-10-1 10:00:00');
 
 -- session
-INSERT INTO exam_sessions (exam_id, room_id, proctor_id, exam_date, exam_time, capacity, created_at)
+INSERT INTO exam_sessions (exam_id, room_id, proctor_id, session_date, session_time, capacity, created_at)
 	VALUES (1, 1, 2, '2026-10-14', '18:00:00', 20, '2026-10-11 11:00:00');
 
 -- registration

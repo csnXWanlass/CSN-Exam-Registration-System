@@ -1,15 +1,19 @@
 -- ============================================
 -- EXAM REGISTRATION SYSTEM
--- Version 0.1.3
+-- Version 0.1.4
 -- ============================================
 -- changelog:
+--  0.1.4
+--  * Moved "unique name" constraint on Campuses to a named constraint
+--  * Changed "exam_..." colum names to "session_..." on Sessions
+--  * Added uq_sessions constraint
 --  0.1.3
 --  * Added "status" column to sessions table
 --  0.1.2
 --  * "campus" changed to "campuses"
 --  0.1.1:
 --  *added version control
---  *split exam_sessions.exam_date into date/time columns
+--  *split exam_sessions.session_date into date/time columns
 --  *altered order of campus columns to match address forms
 --  *added unique constraint to campus names
 --  *changed CONSTRAINT no_duplicate_session to uq_registration
@@ -39,7 +43,7 @@ USE exam_registration;
 
 CREATE TABLE campuses (
     campus_id INT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
     address VARCHAR(255) NOT NULL,
     city VARCHAR(50) NOT NULL,
     state CHAR(2) NOT NULL,
@@ -47,7 +51,9 @@ CREATE TABLE campuses (
     location_phone VARCHAR(20),
 
     CONSTRAINT uq_campus_location
-        UNIQUE (city, state, address)
+        UNIQUE (city, state, address),
+    CONSTRAINT uq_campus_name
+        UNIQUE (name)
 );
 
 
@@ -114,8 +120,8 @@ CREATE TABLE exam_sessions (
     exam_id INT UNSIGNED NOT NULL,
     room_id INT UNSIGNED NOT NULL,
     proctor_id INT UNSIGNED NOT NULL,
-    exam_date DATE NOT NULL,
-    exam_time TIME NOT NULL,
+    session_date DATE NOT NULL,
+    session_time TIME NOT NULL,
     capacity TINYINT UNSIGNED NOT NULL DEFAULT 20,
     status ENUM('Active', 'Cancelled', 'Complete')
         NOT NULL DEFAULT 'Active',
@@ -133,6 +139,9 @@ CREATE TABLE exam_sessions (
     CONSTRAINT fk_session_proctor
         FOREIGN KEY (proctor_id)
         REFERENCES users(user_id),
+
+    CONSTRAINT uq_session
+        UNIQUE (exam_id, session_date, session_time, room_id),
 
     CONSTRAINT chk_session_capacity
         CHECK (capacity BETWEEN 1 AND 20)
@@ -306,7 +315,7 @@ SELECT
     e.exam_name,
     e.subject,
     e.exam_level,
-    es.exam_date,
+    es.session_date,
     c.name,
     c.address,
     c.city,

@@ -28,6 +28,7 @@ class Campus(db.Model):
     
     __table_args__ = (
         db.UniqueConstraint("city", "state", "address", name="uq_campus_location"),
+        db.UniqueConstraint("name", name="uq_campus_name"),
     )
 
     def __repr__(self):
@@ -47,7 +48,7 @@ class Rooms(db.Model):
 
     __table_args__ = (
         db.ForeignKeyConstraint(["campus_id"], ["campuses.campus_id"], name="fk_rooms_campus"),
-        db.UniqueConstraint("campus_id", "room_num", name="uq_room"),
+        db.UniqueConstraint("campus_id", "building", "room_num", name="uq_room"),
     )
 
     def __repr__(self):
@@ -111,8 +112,8 @@ class Sessions(db.Model):
     exam_id = db.Column(INTEGER(unsigned=True), nullable=False)
     room_id = db.Column(INTEGER(unsigned=True), nullable=False)
     proctor_id = db.Column(INTEGER(unsigned = True), nullable = False)
-    exam_date = db.Column(db.Date, nullable = False)
-    exam_time = db.Column(db.Time, nullable = False)
+    session_date = db.Column(db.Date, nullable = False)
+    session_time = db.Column(db.Time, nullable = False)
     capacity = db.Column(TINYINT(unsigned=True), nullable = False, server_default="20")
     status = db.Column(db.Enum("Active", "Cancelled", "Complete"), nullable=False, server_default="Active")
     created_at = db.Column(db.DateTime, server_default=db.text("CURRENT_TIMESTAMP"))
@@ -121,11 +122,12 @@ class Sessions(db.Model):
         db.ForeignKeyConstraint(["exam_id"], ["exams.exam_id"], name="fk_sessions_exam"),
         db.ForeignKeyConstraint(["room_id"], ["rooms.room_id"], name="fk_sessions_room"),
         db.ForeignKeyConstraint(["proctor_id"], ["users.user_id"], name="fk_session_proctor"),
-        db.UniqueConstraint("exam_id", "exam_date", "exam_time", name="uq_session"),
+        db.UniqueConstraint("exam_id", "session_date", "session_time",
+                            "room_id", name="uq_session"),
     )
 
     def __repr__(self):
-        return f"<Session {self.session_id} for exam {self.exam_id} on {self.exam_date} at {self.exam_time}>"
+        return f"<Session {self.session_id} for exam {self.exam_id} on {self.session_date} at {self.session_time}>"
 
 
 

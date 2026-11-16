@@ -33,10 +33,12 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy import or_
 from sqlalchemy.exc import SQLAlchemyError
+from pydantic import ValidationError
 
 from . import db
 from .models import Campus, Exams, Registrations, Rooms, Sessions, Users
-from helpers import login_required, role_required, get_current_user, parse_date
+from schemas_exams_sessions import RoomSearch, SessionCreate
+from helpers import role_required, get_current_user, parse_date, validation_errors
 
 # A Blueprint is a bundle of routes that gets plugged into the app in
 # create_app(). Every route in this file starts with /api.
@@ -46,19 +48,20 @@ api = Blueprint("api", __name__, url_prefix="/api")
 VALID_STATUSES = ("Active", "Cancelled", "Complete")
 
 @api.route("/registrations", methods=["GET"])
+@role_required('Student')
 def registration_history():
     """Return the signed-in student's reservations, filtered by the query string."""
 
     # Find out who is asking. Nobody signed in (or a stale cookie for a
     # user that no longer exists) gets a 401 and no data.
     user = get_current_user() #get_signed_in_user()
-    if user is None:
-        session.clear()
-        return jsonify(error="Please log in."), 401
+    # if user is None:
+    #     session.clear()
+    #     return jsonify(error="Please log in."), 401
 
-    # Faculty don't book exams, so they have no history to search.
-    if user.role != "Student":
-        return jsonify(error="Only students have a reservation history."), 403
+    # # Faculty don't book exams, so they have no history to search.
+    # if user.role != "Student":
+    #     return jsonify(error="Only students have a reservation history."), 403
 
     # Join the five tables so every row carries what the page needs:
     # the registration, its session, the exam, the room and the campus.
@@ -103,36 +106,36 @@ def registration_history():
         start = parse_date(date_from)
         if start is None:
             return jsonify(error="date_from must look like 2026-10-14."), 400
-        query = query.where(Sessions.exam_date >= start)
+        query = query.where(Sessions.session_date >= start)
 
     date_to = request.args.get("date_to", "").strip()
     if date_to:
         end = parse_date(date_to)
         if end is None:
             return jsonify(error="date_to must look like 2026-10-14."), 400
-        query = query.where(Sessions.exam_date <= end)
+        query = query.where(Sessions.session_date <= end)
 
     # Newest exam first
-    query = query.order_by(Sessions.exam_date.desc(), Sessions.exam_time.desc())
+    query = query.order_by(Sessions.session_date.desc(), Sessions.session_time.desc())
 
     # Turn each row into a plain dictionary that jsonify can send to the browser
     history = []
     for registration, exam_session, exam, room, campus in db.session.execute(query).all():
         history.append({
-            "registration_id": registration.registration_id,
-            "status": registration.status,
+            "registration_id":  registration.registration_id,
+            "status":           registration.status,
             # dates and times aren't JSON types, so they are sent as text
-            "registered_at": registration.registered_at.isoformat() if registration.registered_at else None,
-            "session_id": exam_session.session_id,
-            "exam_name": exam.exam_name,
-            "subject": exam.subject,
-            "exam_level": exam.exam_level,
-            "exam_date": exam_session.exam_date.isoformat(),
-            "exam_time": exam_session.exam_time.isoformat(),
-            "campus": campus.name,
-            "address": f"{campus.address}, {campus.city}, {campus.state} {campus.zip}",
-            "building": room.building,
-            "room_num": room.room_num,
+            "registered_at":    registration.registered_at.isoformat() if registration.registered_at else None,
+            "session_id":       exam_session.session_id,
+            "exam_name":        exam.exam_name,
+            "subject":          exam.subject,
+            "exam_level":       exam.exam_level,
+            "session_date":        exam_session.session_date.isoformat(),
+            "session_time":        exam_session.session_time.isoformat(),
+            "campus":           campus.name,
+            "address":          f"{campus.address}, {campus.city}, {campus.state} {campus.zip}",
+            "building":         room.building,
+            "room_num":         room.room_num,
         })
 
     return jsonify(registrations=history, count=len(history))
@@ -187,6 +190,12 @@ def cancel_registration(registration_id):
         return jsonify(error="Could not cancel the reservation. Please try again."), 500
 
     return jsonify(message="Reservation cancelled."), 200
+
+## END STUDENT HISTORY ROUTES ##
+
+
+
+## BEGIN FACULTY REPORT ROUTES ##
 
 @api.route("/faculty-report", methods=["GET"])
 @role_required('Faculty')
@@ -256,19 +265,19 @@ def proctor_history():
         start = parse_date(date_from)
         if start is None:
             return jsonify(error="date_from must look like 2026-10-14."), 400
-        query = query.where(Sessions.exam_date >= start)
+        query = query.where(Sessions.session_date >= start)
 
     date_to = request.args.get("date_to", "").strip()
     if date_to:
         end = parse_date(date_to)
         if end is None:
             return jsonify(error="date_to must look like 2026-10-14."), 400
-        query = query.where(Sessions.exam_date <= end)
+        query = query.where(Sessions.session_date <= end)
 
     # Newest Sessions first, then by exam subject and name, then by student last / first.
     query = query.order_by(
-        Sessions.exam_date.desc(),
-        Sessions.exam_time.desc(),
+        Sessions.session_date.desc(),
+        Sessions.session_time.desc(),
         Exams.subject.asc(),
         Exams.exam_level.asc(),
         Exams.exam_name.asc(),
@@ -284,8 +293,8 @@ def proctor_history():
             "subject": exam.subject,
             "exam_level": exam.exam_level,
             "exam_name": exam.exam_name,
-            "exam_date": exam_session.exam_date.isoformat(),
-            "exam_time": exam_session.exam_time.isoformat(),
+            "session_date": exam_session.session_date.isoformat(),
+            "session_time": exam_session.session_time.isoformat(),
             # dates and times aren't JSON types, so they are sent as text
             "campus": campus.name,
             "address": f"{campus.address}, {campus.city}, {campus.state} {campus.zip}",
@@ -306,17 +315,19 @@ def proctor_history():
 
 
 @api.route("/faculty-report/<int:session_id>/cancel", methods=["POST"])
+@role_required('Faculty')
 def cancel_session(exam_session_id):
     """Cancel one of the signed-in student's reservations."""
 
-    # Find out who is asking, the same way the history route does
+    # # Find out who is asking, the same way the history route does
     user = get_current_user()
-    if user is None:
-        session.clear()
-        return jsonify(error="Please log in."), 401
+    # if user is None:
+    #     session.clear()
+    #     return jsonify(error="Please log in."), 401
 
-    if user.role != "Faculty":
-        return jsonify(error="Only faculty can cancel sessions."), 403
+    # if user.role != "Faculty":
+    #     return jsonify(error="Only faculty can cancel sessions."), 403
+
 
 
     ### BEGIN TRANSACTION ###
@@ -370,3 +381,176 @@ def cancel_session(exam_session_id):
         return jsonify(error="Could not cancel the session. Please try again."), 500
 
     return jsonify(message="Session cancelled."), 200
+
+## END FACULTY REPORT ROUTES ##
+
+
+
+## BEGIN SESSION CREATION ROUTES##
+
+@api.route("/rooms", methods=["GET"])
+@role_required('Faculty')
+def find_location():
+    """Same function is used to find campus, building, and room. Supports search-as-type"""
+
+    # validate the queries against pydantic model
+    try:
+        # turn the search parameters into a dictionary, then validate it
+        params = RoomSearch.model_validate(request.args.to_dict())
+    except ValidationError as e:
+        return jsonify(error="Invalid search.", details = validation_errors(e)), 400
+    
+    # base query: the list of all campuses that have rooms, as well as the rooms contained
+    query = (
+        db.select(Campus, Rooms)
+        .join(Rooms, Rooms.campus_id == Campus.campus_id)
+    )
+
+    ## SEARCH OPTIONS ##
+
+    # If you have the campus ID, use that. Else search by name.
+    if params.campus_id is not None:
+        query = query.where(
+            Campus.campus_id == params.campus_id
+        )
+    elif params.campus:  # if there is a query for campus
+        # filter by campus name search
+        query = query.where(
+            Campus.name.contains(params.campus, autoescape=True)
+        )
+
+    if params.building:  # if there is a query for building
+        query = query.where(
+            Rooms.building.contains(params.building, autoescape=True)
+        )
+    if params.room_num:  # if there is a query for room
+        query = query.where(
+            Rooms.room_num.contains(params.room_num, autoescape=True)
+        )
+
+    rooms = []  # create a list of dictionaries
+    # fill dictionary with query results
+    for campus, room in db.session.execute(query).all():
+        rooms.append({
+            "c_id":         campus.campus_id,
+            "c_name":       campus.name,
+            "c_address":    campus.address,
+            "c_city":       campus.city,
+            "c_state":      campus.state,
+            "c_zip":        campus.zip,
+            "r_id":         room.room_id,
+            "r_building":   room.building,
+            "r_room_num":   room.room_num,
+        })
+
+    # return a json file with all rooms as a list of dictionaries as well as the count
+    return jsonify(roomsFound=rooms, count=len(rooms))
+
+@api.route("/exams", methods=["GET"])
+@role_required('Faculty')
+def find_exam():
+    """Simple exam search function"""
+
+    search = request.args.get("q","").strip() # return the value after "q="
+    # base query: search exam names, subject, and level
+    query = db.select(Exams).limit(20)
+    if search:
+            # autoescape=True treats % and _ in the search text as plain characters
+            query = query.where(or_(
+                Exams.subject.contains(search, autoescape=True),
+                Exams.exam_level.contains(search, autoescape=True),
+                Exams.exam_name.contains(search, autoescape=True),
+            ))
+
+    query = query.order_by(
+        Exams.subject.asc(),
+        Exams.exam_level.asc(),
+        Exams.exam_name.asc(),
+        Exams.description.asc()
+    )
+
+    # create an empty list
+    results = []
+
+    # fill the list with each row as a dictionary
+    for exam in db.session.scalars(query).all():
+        results.append({
+            "e_id":             exam.exam_id,
+            "e_subject":        exam.subject,
+            "e_level":          exam.exam_level,
+            "e_name":           exam.exam_name,
+            "e_description:":   exam.description,
+        })
+
+
+    return jsonify(exams=results, count=len(results))
+
+@api.route("/create/session", methods=["POST"])
+@role_required('Faculty')
+def create_session():
+    # IMPORTANT: all SQL Alchemy queries begin a transaction, which must be later committed
+
+    # Initialize data variables #
+
+    user = get_current_user()
+
+    try:
+        # take data from the javascript or create empty dict, then validate.
+        new_session = SessionCreate.model_validate(request.get_json(silent=True) or {})
+    except ValidationError as e:
+        return jsonify(error="Invalid input.", details=validation_errors(e)), 400
+
+    ## BEGIN TRANSACTION ##
+
+    # build the new row as a Sessions object
+    session_row = Sessions(
+        exam_id=new_session.exam_id,
+        room_id=new_session.room_id,
+        proctor_id=user.user_id,
+        session_date=new_session.session_date,
+        session_time=new_session.session_time,
+    )
+
+    # Check if room and exam exist #
+    if (db.session.get(Exams, session_row.exam_id) is None
+            or db.session.get(Rooms, session_row.room_id) is None):
+        db.session.rollback()
+        return jsonify(error="Exam or room not found."), 404
+    
+    # Check if the room is taken #
+    room_conflict = db.session.scalar(
+        db.select(Sessions).where(
+            Sessions.room_id == session_row.room_id,
+            Sessions.session_date == session_row.session_date,
+            Sessions.session_time == session_row.session_time,
+            Sessions.status == "Active",
+        ).limit(1)
+    )
+    if room_conflict is not None:
+        db.session.rollback()
+        return jsonify(error="Time slot for this room is taken."), 409
+
+    # Check if proctor has a schedule conflict #
+    proctor_conflict = db.session.scalar(
+        db.select(Sessions).where(
+            Sessions.proctor_id == user.user_id,
+            Sessions.session_date == session_row.session_date,
+            Sessions.session_time == session_row.session_time,
+            Sessions.status == "Active",
+        ).limit(1)
+    )
+    if proctor_conflict is not None:
+        db.session.rollback()
+        return jsonify(error="You already have a session at this date and time."), 409
+
+
+    # Commit the transaction #
+    db.session.add(session_row)
+    try:
+        db.session.commit()  # INSERT data
+    except SQLAlchemyError:
+        db.session.rollback()
+        return jsonify(error="Could not create the session. Try again."), 500
+
+    # if successful, print success.
+    return jsonify(message="Session created successfully", session_id=session_row.session_id), 201

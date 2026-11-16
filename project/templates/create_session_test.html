@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create session test (temporary)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 1.5rem auto; padding: 0 1rem; }
+    h2 { margin: 2rem 0 0.5rem; }
+    label { display: block; font-weight: 600; margin: 0.8rem 0 0.3rem; }
+    input { font: inherit; padding: 0.4rem 0.5rem; width: 100%; box-sizing: border-box; }
+    input:disabled { opacity: 0.5; }
+    .row { display: flex; gap: 1rem; }
+    .row > div { flex: 1; }
+    .error { color: #b00020; font-size: 0.9rem; min-height: 1.2em; margin: 0.25rem 0 0; }
+    @media (prefers-color-scheme: dark) { .error { color: #ff8a80; } }
+    ul.results { list-style: none; margin: 0.4rem 0 0; padding: 0; max-height: 12rem; overflow-y: auto;
+                 border: 1px solid rgba(128, 128, 128, 0.5); }
+    ul.results:empty { display: none; }
+    ul.results li + li { border-top: 1px solid rgba(128, 128, 128, 0.3); }
+    ul.results button { font: inherit; width: 100%; text-align: left; padding: 0.5rem 0.6rem; cursor: pointer;
+                        background: transparent; color: inherit; border: 0; }
+    ul.results button:hover, ul.results button:focus-visible { background: rgba(128, 128, 128, 0.2); }
+    .muted { opacity: 0.7; font-size: 0.85rem; }
+    .none { padding: 0.5rem 0.6rem; opacity: 0.7; }
+    #summary { padding: 0.75rem 1rem; border: 1px solid rgba(128, 128, 128, 0.5); margin: 1rem 0; white-space: pre-line; }
+    #debug-info { font-family: ui-monospace, monospace; font-size: 0.85rem; margin: 0.5rem 0; }
+    pre { padding: 1rem; border: 1px solid rgba(128, 128, 128, 0.5); overflow: auto; max-height: 20rem; white-space: pre-wrap; }
+    button.plain { font: inherit; padding: 0.4rem 1rem; cursor: pointer; margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Create session test</h1>
+  <p>Temporary page. Log in as a faculty member first. Delete this file when you’re done.</p>
+
+  <div id="summary" aria-live="polite"></div>
+
+  <!-- 1. EXAM -->
+  <h2>1. What exam</h2>
+  <label for="exam">Exam</label>
+  <input type="text" id="exam" autocomplete="off" placeholder="Search by name, subject, or level">
+  <p class="error" id="exam-error"></p>
+  <ul class="results" id="exam-results"></ul>
+
+  <!-- 2. LOCATION -->
+  <h2>2. What location</h2>
+  <label for="campus">Campus</label>
+  <input type="text" id="campus" autocomplete="off" placeholder="Type part of a campus name">
+  <p class="error" id="campus-error"></p>
+  <ul class="results" id="campus-results"></ul>
+
+  <label for="building">Building</label>
+  <input type="text" id="building" autocomplete="off" placeholder="Choose a campus first" disabled>
+  <p class="error" id="building-error"></p>
+  <ul class="results" id="building-results"></ul>
+
+  <label for="room_num">Room</label>
+  <input type="text" id="room_num" autocomplete="off" placeholder="Choose a building first" disabled>
+  <p class="error" id="room_num-error"></p>
+  <ul class="results" id="room-results"></ul>
+
+  <!-- 3. TIME -->
+  <h2>3. What time</h2>
+  <div class="row">
+    <div>
+      <label for="date">Date (today or later)</label>
+      <input type="date" id="date">
+    </div>
+    <div>
+      <label for="time">Time (8:00 AM to 10:00 PM)</label>
+      <input type="time" id="time" min="08:00" max="22:00">
+    </div>
+  </div>
+  <p class="error" id="time-error"></p>
+
+  <p>
+    <button type="button" class="plain" id="create">Create session</button>
+    <button type="button" class="plain" id="reset">Start over</button>
+  </p>
+
+  <h2>Last request</h2>
+  <div id="debug-info">No request yet.</div>
+  <pre id="debug-output">(the raw response will appear here)</pre>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+
+    const state = { exam: null, campus: null, building: null, room: null };
+    const timers = {};
+    const controllers = {};
+
+    // Which error box each field or step reports into
+    const ERROR_BOX = {
+      exam: 'exam-error', exam_id: 'exam-error',
+      campus: 'campus-error', campus_id: 'campus-error',
+      building: 'building-error',
+      room: 'room_num-error', room_num: 'room_num-error', room_id: 'room_num-error',
+      create: 'time-error', session_date: 'time-error', session_time: 'time-error', form: 'time-error',
+    };
+
+    // ---------- helpers ----------
+
+    function uniqueBy(items, keyFn) {
+      const seen = new Map();
+      for (const item of items) {
+        const key = keyFn(item);
+        if (!seen.has(key)) seen.set(key, item);
+      }
+      return [...seen.values()];
+    }
+
+    function debounce(step, fn) {
+      clearTimeout(timers[step]);
+      timers[step] = setTimeout(fn, 300);
+    }
+
+    function clearErrors() {
+      for (const id of new Set(Object.values(ERROR_BOX))) el(id).textContent = '';
+    }
+
+    function showFailure(step, data) {
+      if (data && data.details) {
+        for (const problem of data.details) {
+          const box = el(ERROR_BOX[problem.field] || ERROR_BOX[step]);
+          box.textContent += (box.textContent ? ' ' : '') + problem.message;
+        }
+      } else if (data && data.error) {
+        el(ERROR_BOX[step]).textContent = data.error;
+      }
+    }
+
+    function showDebug(method, url, status, data, rawText) {
+      el('debug-info').textContent =
+        method + ' ' + url + '  ->  HTTP ' + status + (data && data.count !== undefined ? '  (count: ' + data.count + ')' : '');
+      el('debug-output').textContent = data ? JSON.stringify(data, null, 2) : '(not JSON)\n\n' + rawText;
+    }
+
+    // Read a response, show it in the debug panel, and return the JSON if it succeeded (else null)
+    async function readResponse(step, method, url, response) {
+      const text = await response.text();
+      let data = null;
+      try { data = JSON.parse(text); } catch (parseError) { /* leave as null */ }
+      showDebug(method, url, response.status, data, text);
+      clearErrors();
+      if (!response.ok) { showFailure(step, data); return null; }
+      return data;
+    }
+
+    async function getJson(step, path, params) {
+      if (controllers[step]) controllers[step].abort();   // cancel this step's older request
+      controllers[step] = new AbortController();
+      const query = new URLSearchParams();
+      for (const [name, value] of Object.entries(params)) {
+        if (value !== '' && value !== null && value !== undefined) query.set(name, value);
+      }
+      const url = path + (query.toString() ? '?' + query : '');
+      try {
+        const response = await fetch(url, { signal: controllers[step].signal });
+        return await readResponse(step, 'GET', url, response);
+      } catch (error) {
+        if (error.name === 'AbortError') return null;
+        el('debug-info').textContent = 'GET ' + url + '  ->  request failed';
+        el('debug-output').textContent = String(error);
+        return null;
+      }
+    }
+
+    function renderList(listId, items, labelFn, subFn, onPick) {
+      const list = el(listId);
+      list.replaceChildren();
+      if (items.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'none';
+        li.textContent = 'No matches';
+        list.append(li);
+        return;
+      }
+      for (const item of items) {
+        const li = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = labelFn(item);
+        if (subFn) {
+          const sub = document.createElement('div');
+          sub.className = 'muted';
+          sub.textContent = subFn(item);
+          button.append(sub);
+        }
+        button.addEventListener('click', () => onPick(item));
+        li.append(button);
+        list.append(li);
+      }
+    }
+
+    function updateSummary() {
+      const lines = [];
+      lines.push(state.exam ? 'Exam: ' + state.exam.name + ' (exam_id ' + state.exam.id + ')' : 'Exam: not chosen');
+      let place = 'Location: ';
+      if (!state.campus) place += 'not chosen';
+      else {
+        place += state.campus.name;
+        if (state.building) place += ', building ' + state.building;
+        if (state.room) place += ', room ' + state.room.room_num + ' (room_id ' + state.room.id + ')';
+      }
+      lines.push(place);
+      el('summary').textContent = lines.join('\n');
+    }
+
+    // ---------- 1. exam ----------
+
+    async function searchExam() {
+      const data = await getJson('exam', '/api/exams', { q: el('exam').value.trim() });
+      if (data === null) return;
+      renderList('exam-results', data.exams,
+        (e) => e.e_name,
+        (e) => e.e_subject + ' ' + e.e_level,
+        pickExam);
+    }
+
+    function pickExam(exam) {
+      state.exam = { id: exam.e_id, name: exam.e_name };
+      el('exam').value = exam.e_name;
+      el('exam-results').replaceChildren();
+      updateSummary();
+    }
+
+    el('exam').addEventListener('input', () => {
+      state.exam = null;
+      updateSummary();
+      debounce('exam', searchExam);
+    });
+
+    // ---------- 2. location: campus -> building -> room ----------
+
+    async function searchCampus() {
+      const data = await getJson('campus', '/api/rooms', { campus: el('campus').value.trim() });
+      if (data === null) return;
+      const campuses = uniqueBy(data.roomsFound, (r) => r.c_id).map((r) => ({
+        id: r.c_id,
+        name: r.c_name,
+        address: r.c_address + ', ' + r.c_city + ', ' + r.c_state + ' ' + r.c_zip,
+      }));
+      renderList('campus-results', campuses, (c) => c.name, (c) => c.address, pickCampus);
+    }
+
+    function pickCampus(campus) {
+      state.campus = campus;
+      el('campus').value = campus.name;
+      el('campus-results').replaceChildren();
+      resetBuilding();
+      el('building').disabled = false;
+      el('building').placeholder = 'Type part of a building name';
+      el('building').focus();
+      updateSummary();
+      searchBuilding();
+    }
+
+    async function searchBuilding() {
+      if (!state.campus) return;
+      const data = await getJson('building', '/api/rooms', {
+        campus_id: state.campus.id,
+        building: el('building').value.trim(),
+      });
+      if (data === null) return;
+      const buildings = uniqueBy(data.roomsFound, (r) => r.r_building).map((r) => r.r_building).sort();
+      renderList('building-results', buildings, (b) => 'Building ' + b, null, pickBuilding);
+    }
+
+    function pickBuilding(building) {
+      state.building = building;
+      el('building').value = building;
+      el('building-results').replaceChildren();
+      resetRoom();
+      el('room_num').disabled = false;
+      el('room_num').placeholder = 'Type part of a room number';
+      el('room_num').focus();
+      updateSummary();
+      searchRoom();
+    }
+
+    async function searchRoom() {
+      if (!state.campus || !state.building) return;
+      const data = await getJson('room', '/api/rooms', {
+        campus_id: state.campus.id,
+        building: state.building,
+        room_num: el('room_num').value.trim(),
+      });
+      if (data === null) return;
+      // The route matches building text with "contains", so keep only the exact building here
+      const rooms = data.roomsFound
+        .filter((r) => r.r_building === state.building)
+        .map((r) => ({ id: r.r_id, building: r.r_building, room_num: r.r_room_num }));
+      renderList('room-results', rooms, (r) => 'Room ' + r.room_num, (r) => 'room_id ' + r.id, pickRoom);
+    }
+
+    function pickRoom(room) {
+      state.room = room;
+      el('room_num').value = room.room_num;
+      el('room-results').replaceChildren();
+      updateSummary();
+    }
+
+    function resetBuilding() {
+      state.building = null;
+      el('building').value = '';
+      el('building-results').replaceChildren();
+      resetRoom();
+      el('room_num').disabled = true;
+      el('room_num').placeholder = 'Choose a building first';
+    }
+
+    function resetRoom() {
+      state.room = null;
+      el('room_num').value = '';
+      el('room-results').replaceChildren();
+    }
+
+    el('campus').addEventListener('input', () => {
+      state.campus = null;
+      resetBuilding();
+      el('building').disabled = true;
+      el('building').placeholder = 'Choose a campus first';
+      updateSummary();
+      debounce('campus', searchCampus);
+    });
+
+    el('building').addEventListener('input', () => {
+      state.building = null;
+      resetRoom();
+      el('room_num').disabled = true;
+      el('room_num').placeholder = 'Choose a building first';
+      updateSummary();
+      debounce('building', searchBuilding);
+    });
+
+    el('room_num').addEventListener('input', () => {
+      state.room = null;
+      updateSummary();
+      debounce('room', searchRoom);
+    });
+
+    // ---------- 3. time ----------
+
+    // Don't allow dates before today (in the browser's local time)
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    el('date').min = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+
+    // ---------- create + reset ----------
+
+    el('create').addEventListener('click', async () => {
+      clearErrors();
+      if (!state.exam) { el('exam-error').textContent = 'Pick an exam from the list.'; return; }
+      if (!state.room) { el('room_num-error').textContent = 'Pick a room from the list.'; return; }
+
+      const body = {
+        exam_id: state.exam.id,
+        room_id: state.room.id,
+        session_date: el('date').value,
+        session_time: el('time').value,
+      };
+
+      try {
+        const response = await fetch('/api/create/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        await readResponse('create', 'POST', '/api/create/session', response);
+      } catch (error) {
+        el('debug-info').textContent = 'POST /api/create/session  ->  request failed';
+        el('debug-output').textContent = String(error);
+      }
+    });
+
+    el('reset').addEventListener('click', () => {
+      state.exam = null;
+      state.campus = null;
+      el('exam').value = '';
+      el('campus').value = '';
+      el('date').value = '';
+      el('time').value = '';
+      resetBuilding();
+      el('building').disabled = true;
+      el('building').placeholder = 'Choose a campus first';
+      clearErrors();
+      updateSummary();
+      searchExam();
+      searchCampus();
+    });
+
+    updateSummary();
+    searchExam();     // show the first exams on load
+    searchCampus();   // show every campus on load
+  </script>
+</body>
+</html>
