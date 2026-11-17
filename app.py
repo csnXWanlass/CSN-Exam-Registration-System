@@ -102,6 +102,59 @@ def register():
 
 
 # Exam Registration pages
+
+def build_session_options(rows, registered_ids):
+    """Turn the rows from exam_selection() into a plain list the page's dropdowns are built from.
+
+    rows           -- list of (session, exam, room, campus, proctor, taken) tuples
+    registered_ids -- set of session IDs the student has booked (Active or Complete)
+
+    Returns one dictionary per session the student could pick. Everything is text or a number,
+    so the page can receive the list as JSON.
+    """
+    # Exams the student already has a booking for. Only one booking per exam is allowed,
+    # so the page locks every session of these exams.
+    registered_exam_ids = {
+        exam.exam_id
+        for exam_session, exam, room, campus, proctor, taken in rows
+        if exam_session.session_id in registered_ids
+    }
+
+    options = []
+    for exam_session, exam, room, campus, proctor, taken in rows:
+        registered = exam_session.session_id in registered_ids
+
+        # A full session is no longer offered (requirement 11), unless it is the
+        # student's own booking, which they still want to see.
+        if taken >= exam_session.capacity and not registered:
+            continue
+
+        day = exam_session.session_date
+        clock = exam_session.session_time
+        options.append({
+            "session_id": exam_session.session_id,
+            "exam_id": exam.exam_id,
+            "subject": exam.subject,
+            "level": exam.exam_level or "",
+            "exam_name": exam.exam_name,
+            "description": exam.description or "No description provided.",
+            "campus": campus.name,
+            "building": room.building,
+            "room_id": room.room_id,
+            "room_num": room.room_num,
+            "date": day.isoformat(),
+            "date_label": f"{day:%A, %B} {day.day}, {day.year}",
+            "time": clock.strftime("%H:%M"),
+            "time_label": clock.strftime("%I:%M %p").lstrip("0"),
+            "proctor": f"{proctor.first_name} {proctor.last_name}",
+            "capacity": exam_session.capacity,
+            "open_seats": max(0, exam_session.capacity - taken),
+            "registered": registered,
+            "exam_registered": exam.exam_id in registered_exam_ids,
+        })
+    return options
+
+
 @app.route('/exams', methods=['GET'])
 @login_required  # redirect to home page to login and register
 def exam_selection():
@@ -145,12 +198,21 @@ def exam_selection():
                 Registrations.status == 'Active',
             ),
         )
+        # Cancelled sessions are never offered to students
+        .where(Sessions.status == 'Active')
         .group_by(Sessions.session_id)
+        .order_by(
+            Exams.subject.asc(),
+            Exams.exam_level.asc(),
+            Exams.exam_name.asc(),
+            Sessions.session_date.asc(),
+            Sessions.session_time.asc(),
+        )
     )
     # returns a 6-element list of tuples with full rows as object elements, count at the end.
     # objects can be unpacked in html thx to flask integrating with Jinja2
     rows = db.session.execute(query).all()
-    return render_template('exams.html', rows=rows, registered_ids=registered_ids)
+    return render_template('exams.html', session_data=build_session_options(rows, registered_ids))
 
     
 @app.route('/exams', methods=['POST'])
@@ -233,7 +295,7 @@ def exam_registration():
     )
     # check result against capacity
     if taken >= exam_session.capacity:
-        fail('This session is full.', 409)
+        return fail('This session is full.', 409)
 
     # ADD/REACTIVATE REGISTRATION #
     if existing:
@@ -307,4 +369,3 @@ def login(data: UserLogin, db: Session = Depends(db.session)):
         user_email=user.email
     )
 """
-
