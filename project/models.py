@@ -1,9 +1,14 @@
 """
 project/models.py
 
-The User model for the exam_registration database. It maps onto the users
-table that setup_exam_db.py creates, so Flask reads and writes that table
+SQLAlchemy models for the exam_registration database. They map onto the tables created by
+the SQL file (reset_exam_registration_db.sql), so Flask reads and writes those tables
 rather than creating its own.
+
+Reviewed version. Your code is kept; the edits are marked:
+  # CHANGED: an existing line was fixed
+  # NEW:     something was added
+Save this over project/models.py (copy everything, replace the whole file).
 """
 
 from flask_login import UserMixin
@@ -104,7 +109,7 @@ class Exams(db.Model):
 
 
 class Sessions(db.Model):
-    """One row in the sessions table"""
+    """One row in the exam_sessions table"""
 
     __tablename__ = "exam_sessions"
 
@@ -141,6 +146,9 @@ class Registrations(db.Model):
     session_id = db.Column(INTEGER(unsigned=True), nullable=False)
     status = db.Column(db.Enum("Active", "Cancelled", "Complete"), nullable=False, server_default="Active")
     registered_at = db.Column(db.DateTime, server_default=db.text("CURRENT_TIMESTAMP"))
+    # NEW: when the registration was cancelled. The database trigger fills this in; it is
+    # empty for registrations that are not cancelled.
+    cancelled_at = db.Column(db.DateTime, nullable=True)
 
     __table_args__ = (
         db.ForeignKeyConstraint(["student_id"], ["users.user_id"], name="fk_registrations_student"),
@@ -149,10 +157,37 @@ class Registrations(db.Model):
     )
 
     def __repr__(self):
-        return f"<Registration {self.registration_id} for user {self.user_id} and session {self.session_id}>"
+        # CHANGED: self.student_id (this model has no user_id, so printing a registration crashed)
+        return f"<Registration {self.registration_id} for user {self.student_id} and session {self.session_id}>"
 
-    @login_manager.user_loader
-    def load_user(user_id):
-       # Flask-Login passes the id saved in the session cookie;
-       # return the matching Users row, or None if it no longer exists
-       return db.session.get(Users, int(user_id))
+
+
+# NEW: one row in the registration_activity table: a single register or cancel event.
+# The database triggers add these rows automatically; the faculty Activity panel reads them.
+class RegistrationActivity(db.Model):
+    """One row in the registration_activity table"""
+
+    __tablename__ = "registration_activity"
+
+    activity_id = db.Column(INTEGER(unsigned=True), primary_key=True, autoincrement=True)
+    student_id = db.Column(INTEGER(unsigned=True), nullable=False)
+    session_id = db.Column(INTEGER(unsigned=True), nullable=False)
+    action = db.Column(db.Enum("Registered", "Cancelled"), nullable=False)
+    occurred_at = db.Column(db.DateTime, server_default=db.text("CURRENT_TIMESTAMP"))
+
+    __table_args__ = (
+        db.ForeignKeyConstraint(["student_id"], ["users.user_id"], name="fk_activity_student"),
+        db.ForeignKeyConstraint(["session_id"], ["exam_sessions.session_id"], name="fk_activity_session"),
+    )
+
+    def __repr__(self):
+        return f"<Activity {self.action} by user {self.student_id} in session {self.session_id}>"
+
+
+
+# CHANGED: moved out of the Registrations class to module level (it was indented inside it).
+# Flask-Login passes the id saved in the session cookie;
+# return the matching Users row, or None if it no longer exists
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(Users, int(user_id))

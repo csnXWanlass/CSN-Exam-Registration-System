@@ -20,16 +20,37 @@
       <a class="brand" href="{{ url_for('Index') }}">CSN Exam Registration Portal</a>
 
       <nav aria-label="Main">
-        {% if session.get('user_id') %}
-             <a href="{{ url_for('history_page') }}"
-      {% if request.endpoint == 'history_page' %}aria-current="page"{% endif %}>My reservations</a>
-        <a class="nav-cta" href="{{ url_for('logout') }}">Log out</a>
-        {% else %}
-          <a href="{{ url_for('login_page') }}"
-             {% if request.endpoint == 'login_page' %}aria-current="page"{% endif %}>Log in</a>
-          <a class="nav-cta" href="{{ url_for('register_page') }}"
-             {% if request.endpoint == 'register_page' %}aria-current="page"{% endif %}>Create account</a>
-        {% endif %}
+  {# nav_user comes from the context processor in app.py: the logged-in user, or None #}
+  {% if nav_user %}
+
+    {# Everyone logged in gets a Home link #}
+    <a href="{{ url_for('Index') }}"
+       {% if request.endpoint == 'Index' %}aria-current="page"{% endif %}>Home</a>
+
+    {# STUDENTS ONLY: the exam list and their own reservations #}
+    {% if nav_user.role == 'Student' %}
+      <a href="{{ url_for('exam_selection') }}"
+         {% if request.endpoint == 'exam_selection' %}aria-current="page"{% endif %}>Exams</a>
+      <a href="{{ url_for('history_page') }}"
+         {% if request.endpoint == 'history_page' %}aria-current="page"{% endif %}>My reservations</a>
+
+    {# FACULTY: their own pages, with no student links #}
+    {% elif nav_user.role == 'Faculty' %}
+      <a href="{{ url_for('reports_page') }}"
+         {% if request.endpoint == 'reports_page' %}aria-current="page"{% endif %}>Reports</a>
+      <a href="{{ url_for('create_session_page') }}"
+         {% if request.endpoint == 'create_session_page' %}aria-current="page"{% endif %}>Create session</a>
+    {% endif %}
+
+    <a class="nav-cta" href="{{ url_for('logout') }}">Log out</a>
+
+  {# NOT LOGGED IN #}
+  {% else %}
+    <a href="{{ url_for('login_page') }}"
+       {% if request.endpoint == 'login_page' %}aria-current="page"{% endif %}>Log in</a>
+    <a class="nav-cta" href="{{ url_for('register_page') }}"
+       {% if request.endpoint == 'register_page' %}aria-current="page"{% endif %}>Create account</a>
+  {% endif %}
       </nav>
     </div>
   </header>

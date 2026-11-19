@@ -1,0 +1,314 @@
+{# ================================================================
+   faculty_sessions.html: the exam sessions the logged-in faculty member is
+   PROCTORING (conducting). It's laid out like the student exams page, but
+   read-only: there is no Register button. Each session has an Activity button
+   that opens a panel with three lists you can switch between:
+     - Active registrations (name, email, when they registered)
+     - Cancelled (name, email, when they cancelled)
+     - Full history (every register and cancel event, newest first)
+   Flask fills in `rows` and `activity` in the faculty_sessions_page() route in app.py.
+   Save this file as templates/faculty_sessions.html
+   ================================================================ #}
+
+{# Use the shared page layout from base.html #}
+{% extends "base.html" %}
+
+{# Text shown in the browser tab #}
+{% block title %}Reports | CSN Exam Registration Portal{% endblock %}
+
+{# Everything below is inserted into the content area of base.html #}
+{% block content %}
+
+{# Formats a date and time like "Dec 05, 2026 at 9:30 AM", or "Not recorded" if there is none.
+   (Registrations cancelled before the cancelled_at column existed have no time.) #}
+{% macro fmt_dt(dt) -%}
+  {%- if dt -%}
+    {{ dt.strftime('%b %d, %Y') }} at {{ dt.strftime('%I:%M %p').lstrip('0') }}
+  {%- else -%}
+    Not recorded
+  {%- endif -%}
+{%- endmacro %}
+
+<section class="session-list">
+  <h1>Reports</h1>
+
+  {# Only show the list if Flask found at least one upcoming session for this proctor #}
+  {% if rows %}
+  <ul class="session-list__items">
+    {# Each row is (session, exam, room, campus, taken), matching the select() order in faculty_sessions_page() #}
+    {# Loop once per session, unpacking each row into named variables #}
+    {% for s, exam, room, campus, taken in rows %}
+    {# full = every seat is taken #}
+    {% set full = taken >= s.capacity %}
+    {# The active / cancelled / history lists for THIS session, built in the route #}
+    {% set lists = activity[s.session_id] %}
+    <li class="session-entry">
+
+      {# LEFT SIDE: exam name and details #}
+      <div class="session-entry__main">
+        <h2 class="session-entry__name">{{ exam.exam_name }}</h2>
+
+        <dl class="session-entry__facts">
+          <div><dt>Subject</dt><dd>{{ exam.subject }}</dd></div>
+          <div><dt>Level</dt><dd>{{ exam.exam_level }}</dd></div>
+          {# strftime formats the date/time, e.g. "Friday, December 05, 2026" and "9:30 AM" #}
+          <div><dt>Date</dt><dd>{{ s.session_date.strftime('%A, %B %d, %Y') }}</dd></div>
+          <div><dt>Time</dt><dd>{{ s.session_time.strftime('%I:%M %p').lstrip('0') }}</dd></div>
+          <div>
+            <dt>Students registered</dt>
+            <dd>{{ taken }} of {{ s.capacity }}{% if full %} (Full){% endif %}</dd>
+          </div>
+        </dl>
+
+        {# Collapsible section with the exam description and campus address #}
+        <details class="session-entry__more">
+          <summary>Description and campus details</summary>
+          <div class="session-entry__more-body">
+            <p>{{ exam.description or 'No description provided.' }}</p>
+            <address>
+              {{ campus.name }}<br>
+              {{ campus.address }}<br>
+              {{ campus.city }}, {{ campus.state }} {{ campus.zip }}
+            </address>
+          </div>
+        </details>
+      </div>
+
+      {# RIGHT SIDE: where the exam is, plus the Activity button #}
+      <div class="session-entry__location">
+        <dl>
+          <div><dt>Campus</dt><dd>{{ campus.name }}</dd></div>
+          <div><dt>Building</dt><dd>{{ room.building }}</dd></div>
+          <div><dt>Room</dt><dd>{{ room.room_num }}</dd></div>
+        </dl>
+        {# Opens and closes this session's activity panel (the JavaScript at the bottom handles the click).
+           aria-controls points at the panel's id; aria-expanded tells screen readers whether it is open. #}
+        <button type="button" class="activity-toggle"
+                aria-expanded="false"
+                aria-controls="activity-{{ s.session_id }}">Activity</button>
+      </div>
+
+      {# ACTIVITY PANEL: hidden until the Activity button is clicked. It spans both columns of the card. #}
+      <section class="session-entry__activity" id="activity-{{ s.session_id }}" hidden
+               aria-label="Student activity for {{ exam.exam_name }}">
+
+        {# FILTER: switch between the three lists. aria-pressed marks the selected one.
+           data-filter must match the data-list on the matching table below. #}
+        <div class="activity-filters" role="group" aria-label="Filter student activity">
+          <button type="button" class="activity-filter" data-filter="active" aria-pressed="true">
+            Active registrations ({{ lists.active|length }})
+          </button>
+          <button type="button" class="activity-filter" data-filter="cancelled" aria-pressed="false">
+            Cancelled ({{ lists.cancelled|length }})
+          </button>
+          <button type="button" class="activity-filter" data-filter="history" aria-pressed="false">
+            Full history ({{ lists.history|length }})
+          </button>
+        </div>
+
+        {# ACTIVE LIST: student name, email, and when they registered (shown first) #}
+        <div class="activity-table" data-list="active">
+          {% if lists.active %}
+          <div class="activity-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Student</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Registered</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for student, reg in lists.active %}
+                <tr>
+                  <td>{{ student.first_name }} {{ student.last_name }}</td>
+                  <td>{{ student.email }}</td>
+                  <td>{{ fmt_dt(reg.registered_at) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p>No active registrations for this session.</p>
+          {% endif %}
+        </div>
+
+        {# CANCELLED LIST: student name, email, and when they cancelled (hidden until selected) #}
+        <div class="activity-table" data-list="cancelled" hidden>
+          {% if lists.cancelled %}
+          <div class="activity-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Student</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Cancelled</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for student, reg in lists.cancelled %}
+                <tr>
+                  <td>{{ student.first_name }} {{ student.last_name }}</td>
+                  <td>{{ student.email }}</td>
+                  <td>{{ fmt_dt(reg.cancelled_at) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p>No cancelled registrations for this session.</p>
+          {% endif %}
+        </div>
+
+        {# FULL HISTORY: every register and cancel event for this session, newest first.
+           A student who registered, cancelled, and registered again appears three times. #}
+        <div class="activity-table" data-list="history" hidden>
+          {% if lists.history %}
+          <div class="activity-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Student</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Date and time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for student, event in lists.history %}
+                <tr>
+                  <td>{{ student.first_name }} {{ student.last_name }}</td>
+                  <td>{{ student.email }}</td>
+                  <td>{{ event.action }}</td>
+                  <td>{{ fmt_dt(event.occurred_at) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p>No activity recorded for this session yet.</p>
+          {% endif %}
+        </div>
+      </section>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {# Flask found no upcoming sessions where this faculty member is the proctor #}
+  <p>You are not assigned as the proctor for any upcoming exam sessions.</p>
+  {% endif %}
+</section>
+
+<style>
+  /* Everything is scoped under .session-list / .session-entry so it won't fight your site CSS.
+     Fonts and text color are inherited from the rest of the site. */
+
+  /* Centers the page content and limits its width */
+  .session-list { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem; }
+  .session-list__items { list-style: none; margin: 0; padding: 0; }
+
+  /* Each session is a two-column grid: details on the left, location on the right */
+  .session-entry {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem 2rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+  }
+  .session-entry:first-child { border-top: 1px solid rgba(128, 128, 128, 0.4); }
+
+  .session-entry__name { margin: 0 0 0.75rem; font-size: 1.25rem; }
+
+  /* Subject, level, date, etc. flow into as many columns as fit */
+  .session-entry__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.6rem 1.5rem;
+    margin: 0;
+  }
+  .session-entry__facts dt, .session-entry__location dt { font-size: 0.85rem; opacity: 0.7; }   /* small faded label */
+  .session-entry__facts dd, .session-entry__location dd { margin: 0; font-weight: 600; }          /* bold value */
+
+  /* The collapsible description/campus section */
+  .session-entry__more { margin-top: 1rem; }
+  .session-entry__more summary { cursor: pointer; font-weight: 600; }
+  .session-entry__more-body { padding: 0.75rem 0 0 1rem; max-width: 40rem; }
+  .session-entry__more-body address { font-style: normal; margin-top: 0.75rem; }
+
+  /* Right column: campus, building, room, and the Activity button */
+  .session-entry__location { align-self: start; text-align: right; min-width: 9rem; max-width: 16rem; }
+  .session-entry__location dl { margin: 0 0 1rem; }
+  .session-entry__location div { margin-bottom: 0.5rem; }
+
+  /* Activity button and filter buttons */
+  .activity-toggle, .activity-filter { padding: 0.5rem 1.2rem; font: inherit; font-weight: 600; cursor: pointer; }
+  .activity-toggle[aria-expanded="true"] { border-width: 2px; }   /* looks "pressed" while the panel is open */
+  .activity-filter[aria-pressed="true"] { border-width: 2px; text-decoration: underline; }   /* the selected filter */
+
+  /* Activity panel: spans both columns of the card, below the details */
+  .session-entry__activity { grid-column: 1 / -1; padding-top: 0.5rem; }
+  .session-entry__activity[hidden], .activity-table[hidden] { display: none; }   /* makes the hidden attribute win over any other display rule */
+  .activity-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+
+  /* Student tables scroll sideways on narrow screens instead of breaking the page */
+  .activity-scroll { overflow-x: auto; }
+  .activity-table table { width: 100%; border-collapse: collapse; }
+  .activity-table th, .activity-table td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+    white-space: nowrap;
+  }
+  .activity-table th { font-size: 0.85rem; opacity: 0.8; }
+
+  /* Visible outline when navigating with the keyboard (Tab key) */
+  .session-entry__more summary:focus-visible,
+  .activity-toggle:focus-visible,
+  .activity-filter:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+
+  /* On phones, stack the details above the location instead of side by side */
+  @media (max-width: 600px) {
+    .session-entry { grid-template-columns: 1fr; }
+    .session-entry__location { text-align: left; }
+  }
+</style>
+
+<script>
+  // ================================================================
+  // Runs in the browser. Opens and closes each session's Activity panel,
+  // and switches between the Active, Cancelled, and Full history lists inside it.
+  // All the data is already on the page, so no requests are sent to Flask.
+  // ================================================================
+
+  // Activity button: show or hide this session's panel
+  document.querySelectorAll('.activity-toggle').forEach(function (button) {
+    button.addEventListener('click', function () {
+      // aria-controls holds the id of the panel this button belongs to
+      const panel = document.getElementById(button.getAttribute('aria-controls'));
+      const willOpen = panel.hidden;                       // hidden now means it is about to open
+      panel.hidden = !willOpen;
+      button.setAttribute('aria-expanded', String(willOpen));
+    });
+  });
+
+  // Filter buttons: show the list whose data-list matches the clicked button's data-filter
+  document.querySelectorAll('.activity-filter').forEach(function (button) {
+    button.addEventListener('click', function () {
+      const panel = button.closest('.session-entry__activity');   // only change this session's panel
+
+      // mark the clicked filter as selected and the others as not selected
+      panel.querySelectorAll('.activity-filter').forEach(function (other) {
+        other.setAttribute('aria-pressed', String(other === button));
+      });
+
+      // show the matching list, hide the rest
+      panel.querySelectorAll('.activity-table').forEach(function (table) {
+        table.hidden = table.dataset.list !== button.dataset.filter;
+      });
+    });
+  });
+</script>
+{% endblock %}

@@ -1,176 +1,145 @@
 {% extends "base.html" %}
 
-{% block title %}Register for an exam{% endblock %}
+{% block title %}Exam sessions{% endblock %}
 
 {% block content %}
 <section class="exam-list">
-  <h1>Register for an exam</h1>
-  <p class="exam-list__intro">Work down the form. Each choice narrows the options in the next one.</p>
+  <h1>Exam sessions</h1>
 
-  {# session_data comes from exam_selection() in app.py: one entry for every session that can still be booked
-     (plus the student's own bookings). The script below builds every dropdown and radio button from it. #}
-  {% if session_data %}
-  <form class="exam-picker" id="exam-picker" autocomplete="off" novalidate>
+  {% if rows %}
+  <ul class="exam-list__items">
+    {# Each row is (session, exam, room, campus, proctor, taken), matching the select() order in exam_selection() #}
+    {% for s, exam, room, campus, proctor, taken in rows %}
+    {% set full = taken >= s.capacity %}
+    {% set registered = s.session_id in registered_ids %}
+    <li class="exam-entry">
+      <div class="exam-entry__main">
+        <h2 class="exam-entry__name">{{ exam.exam_name }}</h2>
 
-    {# STEP 1: which exam. Subject, Course (the course number) and Exam come from the exams table. #}
-    <fieldset class="exam-step">
-      <legend>1. Choose your exam</legend>
-      <div class="exam-step__fields">
-        <div class="exam-field">
-          <label for="select-subject">Subject</label>
-          <select id="select-subject"></select>
-        </div>
-        <div class="exam-field">
-          <label for="select-course">Course</label>
-          <select id="select-course"></select>
-        </div>
-        <div class="exam-field exam-field--wide">
-          <label for="select-exam">Exam</label>
-          <select id="select-exam"></select>
-        </div>
-      </div>
-      <p class="exam-picker__description" id="exam-description" aria-live="polite"></p>
-    </fieldset>
+        <dl class="exam-entry__facts">
+          <div><dt>Subject</dt><dd>{{ exam.subject }}</dd></div>
+          <div><dt>Level</dt><dd>{{ exam.exam_level }}</dd></div>
+          <div><dt>Date</dt><dd>{{ s.session_date.strftime('%A, %B %d, %Y') }}</dd></div>
+          <div><dt>Time</dt><dd>{{ s.session_time.strftime('%I:%M %p').lstrip('0') }}</dd></div>
+          <div><dt>Proctor</dt><dd>{{ proctor.first_name }} {{ proctor.last_name }}</dd></div>
+          <div>
+            <dt>Seats taken</dt>
+            <dd><span class="seats-taken">{{ taken }}</span> of {{ s.capacity }}</dd>
+          </div>
+        </dl>
 
-    {# STEP 2: optional filters. Leaving them on "Any" shows every location. #}
-    <fieldset class="exam-step">
-      <legend>2. Narrow by location <span class="exam-step__optional">(optional)</span></legend>
-      <div class="exam-step__fields">
-        <div class="exam-field">
-          <label for="select-campus">Campus</label>
-          <select id="select-campus"></select>
-        </div>
-        <div class="exam-field">
-          <label for="select-building">Building</label>
-          <select id="select-building"></select>
-        </div>
-        <div class="exam-field">
-          <label for="select-room">Room</label>
-          <select id="select-room"></select>
-        </div>
-      </div>
-    </fieldset>
-
-    {# STEP 3: date (dropdown), then time (radio buttons) #}
-    <fieldset class="exam-step">
-      <legend>3. Pick a date and time</legend>
-      <div class="exam-step__fields">
-        <div class="exam-field exam-field--wide">
-          <label for="select-date">Date</label>
-          <select id="select-date"></select>
-        </div>
+        <details class="exam-entry__more">
+          <summary>Description and campus details</summary>
+          <div class="exam-entry__more-body">
+            <p>{{ exam.description or 'No description provided.' }}</p>
+            <address>
+              {{ campus.name }}<br>
+              {{ campus.address }}<br>
+              {{ campus.city }}, {{ campus.state }} {{ campus.zip }}
+            </address>
+          </div>
+        </details>
       </div>
 
-      <fieldset class="exam-times" id="exam-times" hidden>
-        <legend>Time</legend>
-        <div class="exam-times__list" id="time-options"></div>
-      </fieldset>
-    </fieldset>
-
-    <div class="exam-picker__actions">
-      <button type="button" class="btn btn-primary exam-register" id="register-button" disabled>Register</button>
-      <p class="exam-status" id="register-status" role="status" aria-live="polite"></p>
-    </div>
-  </form>
-
-  {# Confirmation popup. There is only one, and the script fills it in for whichever session was chosen. #}
-  <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
-    <form method="dialog" class="confirm-dialog__body">
-      <h2 class="confirm-dialog__title" id="confirm-title">Register for this exam?</h2>
-      <p class="confirm-dialog__exam" id="confirm-exam"></p>
-      <p class="confirm-dialog__detail" id="confirm-when"></p>
-      <p class="confirm-dialog__detail" id="confirm-where"></p>
-      <div class="confirm-dialog__actions">
-        <button type="submit" value="cancel" class="confirm-dialog__cancel">Cancel</button>
-        <button type="submit" value="confirm" class="confirm-dialog__ok">Register</button>
+      <div class="exam-entry__action">
+        <dl class="exam-entry__location">
+          <div><dt>Campus</dt><dd>{{ campus.name }}</dd></div>
+          <div><dt>Building</dt><dd>{{ room.building }}</dd></div>
+          <div><dt>Room</dt><dd>{{ room.room_num }}</dd></div>
+        </dl>
+         <button type="button"
+                class="exam-register{% if full or registered %} exam-register--off{% endif %}"
+                data-session-id="{{ s.session_id }}"
+                data-exam-name="{{ exam.exam_name }}"
+                data-exam-when="{{ s.session_date.strftime('%A, %B') }} {{ s.session_date.day }} at {{ s.session_time.strftime('%I:%M %p').lstrip('0') }}"
+                data-exam-where="{{ campus.name }}, Building {{ room.building }}, Room {{ room.room_num }}"
+                {% if full or registered %}disabled{% endif %}>
+                    
+          {% if registered %}Registered{% elif full %}Full{% else %}Register{% endif %}
+        </button>
+        <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title">
+                      <form method="dialog" class="confirm-dialog__body">
+                        <h2 class="confirm-dialog__title" id="confirm-title">Register for this exam?</h2>
+                        <p class="confirm-dialog__exam" id="confirm-exam"></p>
+                        <p class="confirm-dialog__detail" id="confirm-when"></p>
+                        <p class="confirm-dialog__detail" id="confirm-where"></p>
+                        <div class="confirm-dialog__actions">
+                          <button type="submit" value="cancel" class="confirm-dialog__cancel">Cancel</button>
+                          <button type="submit" value="confirm" class="confirm-dialog__ok">Register</button>
+                        </div>
+                      </form>
+                    </dialog>
+        <p class="exam-entry__status" role="status" aria-live="polite">{% if registered %}You’re registered for this session.{% endif %}</p>
       </div>
-    </form>
-  </dialog>
-
-  {# The sessions as JSON for the script. tojson makes it safe to place inside a page. #}
-  <script type="application/json" id="session-data">{{ session_data|tojson }}</script>
+    </li>
+    {% endfor %}
+  </ul>
   {% else %}
   <p>No exam sessions are available right now. Check back later.</p>
   {% endif %}
 </section>
 
 <style>
-  /* Everything is scoped under .exam-list so it won't fight your site CSS.
-     Colors come from the variables in style.css (--brand, --line, and so on). */
+  /* Everything is scoped under .exam-list / .exam-entry so it won't fight your site CSS.
+     Fonts and text color are inherited from the rest of the site. */
   .exam-list { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem; }
-  .exam-list h1 { font-size: clamp(1.8rem, 4vw, 2.4rem); }
-  .exam-list__intro { margin-top: 0.75rem; color: var(--ink-soft); }
+  .exam-list__items { list-style: none; margin: 0; padding: 0; }
 
-  .exam-picker { display: grid; gap: 1.5rem; margin-top: 1.75rem; }
+  .exam-entry {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem 2rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.4);
+  }
+  .exam-entry:first-child { border-top: 1px solid rgba(128, 128, 128, 0.4); }
 
-  /* Each numbered step is a boxed group */
-  .exam-step {
-    min-width: 0;
+  .exam-entry__name { margin: 0 0 0.75rem; font-size: 1.25rem; }
+
+  .exam-entry__facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.6rem 1.5rem;
     margin: 0;
-    padding: 1.1rem 1.25rem 1.25rem;
-    background: var(--white);
-    border: 1px solid var(--line);
-    border-radius: 4px;
   }
-  .exam-step > legend { padding: 0 0.4rem; font-size: 1.1rem; font-weight: 700; }
-  .exam-step__optional { font-weight: 400; color: var(--ink-soft); }
-  .exam-step__fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem 1.5rem; }
-  .exam-field { display: grid; gap: 0.35rem; align-content: start; min-width: 0; }
-  .exam-field--wide { grid-column: 1 / -1; }
-  .exam-field label { font-weight: 700; }
-  .exam-picker select {
-    width: 100%;
-    min-width: 0;
-    font: inherit;
-    padding: 0.6rem 0.75rem;
-    border: 2px solid var(--line);
-    border-radius: 4px;
-    background: var(--white);
-    color: var(--ink);
-  }
-  .exam-picker select:focus-visible { border-color: var(--brand); }
-  .exam-picker select:disabled { opacity: 0.55; cursor: not-allowed; background: var(--paper); }
-  .exam-picker__description { margin: 0.9rem 0 0; color: var(--ink-soft); min-height: 1.6em; }
+  .exam-entry__facts dt { font-size: 0.85rem; opacity: 0.7; }
+  .exam-entry__facts dd { margin: 0; font-weight: 600; }
 
-  /* Time radio buttons: each time is one clickable card */
-  .exam-times { margin: 1.25rem 0 0; padding: 0; min-width: 0; border: 0; }
-  .exam-times[hidden] { display: none; }   /* without this, any display rule here would beat the hidden attribute */
-  .exam-times > legend { padding: 0; margin-bottom: 0.5rem; font-weight: 700; }
-  .exam-times__list { display: grid; gap: 0.75rem; }
+  .exam-entry__more { margin-top: 1rem; }
+  .exam-entry__more summary { cursor: pointer; font-weight: 600; }
+  .exam-entry__more-body { padding: 0.75rem 0 0 1rem; max-width: 40rem; }
+  .exam-entry__more-body address { font-style: normal; margin-top: 0.75rem; }
 
-  .session-option {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.9rem;
-    padding: 0.9rem 1rem;
-    background: var(--white);
-    border: 2px solid var(--line);
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .session-option input { flex: none; width: 1.1rem; height: 1.1rem; margin-top: 0.3rem; accent-color: var(--brand); }
-  .session-option:hover { border-color: var(--brand); }
-  .session-option:has(input:checked) { border-color: var(--brand); background: #eef3fb; }
-  .session-option:has(input:focus-visible) { outline: 3px solid var(--signal); outline-offset: 2px; }
-  .session-option__body { display: grid; gap: 0.15rem; }
-  .session-option__when { font-weight: 700; }
-  .session-option__where,
-  .session-option__meta { font-size: 0.95rem; color: var(--ink-soft); }
-
-  .exam-picker__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
-  .exam-picker .exam-register { font: inherit; font-weight: 700; cursor: pointer; }
-  .exam-picker .exam-register:disabled,
-  .exam-picker .exam-register:disabled:hover {
+  .exam-entry__action { align-self: start; text-align: right; min-width: 9rem; max-width: 16rem; }
+  .exam-entry__location { margin: 0 0 1rem; }
+  .exam-entry__location div { margin-bottom: 0.5rem; }
+  .exam-entry__location dt { font-size: 0.85rem; opacity: 0.7; }
+  .exam-entry__location dd { margin: 0; font-weight: 600; }
+  .exam-register { padding: 0.6rem 1.4rem; font: inherit; font-weight: 600; cursor: pointer; }
+  /* Disabled = already registered, session full, or request in progress.
+     Written with extra specificity so site-wide button/hover styles can't override the grey. */
+  .exam-list .exam-register:disabled,
+  .exam-list .exam-register:disabled:hover,
+  .exam-list .exam-register--off,
+  .exam-list .exam-register--off:hover {
     background: #d4d4d4;
     color: #6b6b6b;
-    border-color: #bdbdbd;
-    cursor: not-allowed;
+    border: 1px solid #bdbdbd;
+    box-shadow: none;
+    opacity: 1;
+    pointer-events: none;   /* the mouse ignores it: no hover, no click, no pointer cursor */
+    user-select: none;      /* the label can't be highlighted */
   }
-  .exam-status { margin: 0; min-height: 1.6em; }
-  .exam-status--ok { color: #1b4d1f; font-weight: 700; }
-  .exam-status--error { color: #7a1a14; font-weight: 700; }
+  .exam-register:focus-visible,
+  .exam-entry__more summary:focus-visible { outline: 3px solid currentColor; outline-offset: 2px; }
+  .exam-entry__status { margin: 0.5rem 0 0; font-size: 0.9rem; min-height: 1.2em; }
 
-  /* Confirmation popup */
+  @media (max-width: 600px) {
+    .exam-entry { grid-template-columns: 1fr; }
+    .exam-entry__action { text-align: left; }
+  }
+
+    /* Confirmation popup */
   .confirm-dialog {
     width: min(26rem, calc(100vw - 2rem));
     padding: 0;                       /* padding lives on the form, so a click on the dialog itself is a click outside */
@@ -196,228 +165,29 @@
 </style>
 
 <script>
-  // Runs in the browser. Every dropdown and radio button is built from the list of sessions in #session-data.
-  //
-  //   Subject -> Course -> Exam -> Campus -> Building -> Room -> Date -> Time (radio buttons)
-  //
-  // A dropdown only lists options that still exist given the choices made above it.
-  // Changing a dropdown clears every choice below it. Campus, Building and Room are optional filters.
-  // Only the confirmation popup's Register button sends the session_id to Flask, which sends back
-  // a message (or an error) to show on the page.
-
-  const sessions = JSON.parse(document.getElementById('session-data').textContent);
-  const sessionsById = new Map(sessions.map(function (s) { return [String(s.session_id), s]; }));
-
-  const description = document.getElementById('exam-description');
-  const timesBox = document.getElementById('exam-times');
-  const timeList = document.getElementById('time-options');
-  const registerButton = document.getElementById('register-button');
-  const statusLine = document.getElementById('register-status');
+  // Runs in the browser. Clicking Register opens the confirmation popup; only its Register
+  // button sends the session_id to Flask, then shows the message (or error) Flask sent back.
   const dialog = document.getElementById('confirm-dialog');
-  let pendingSession = null;   // the session the popup is asking about
+  let pendingButton = null;   // the Register button the popup is asking about
 
-  // The dropdowns in the order the student fills them in.
-  //   id        matches the <select id="select-..."> in the page
-  //   required  false means the first option is "Any ..." and the student may leave it alone
-  //   anyText   the first option's text
-  //   value     what identifies an option (two sessions with the same value share one option)
-  //   label     the text shown for an option
-  const steps = [
-    { id: 'subject', required: true,  anyText: 'Choose a subject…',
-      value: function (s) { return s.subject; },
-      label: function (s) { return s.subject; } },
-    { id: 'course',  required: true,  anyText: 'Choose a course…',
-      value: function (s) { return s.level || 'none'; },
-      label: function (s) { return s.level ? s.subject + ' ' + s.level : s.subject + ' (no course number)'; } },
-    { id: 'exam',    required: true,  anyText: 'Choose an exam…',
-      value: function (s) { return String(s.exam_id); },
-      label: function (s) { return s.exam_name + (s.exam_registered ? ' (you’re registered)' : ''); } },
-    { id: 'campus',  required: false, anyText: 'Any campus',
-      value: function (s) { return s.campus; },
-      label: function (s) { return s.campus; } },
-    { id: 'building', required: false, anyText: 'Any building',
-      value: function (s) { return s.campus + '|' + s.building; },
-      label: function (s) { return 'Building ' + s.building + ' – ' + s.campus; } },
-    { id: 'room',    required: false, anyText: 'Any room',
-      value: function (s) { return String(s.room_id); },
-      label: function (s) { return 'Room ' + s.room_num + ' (Building ' + s.building + ')'; } },
-    { id: 'date',    required: true,  anyText: 'Choose a date…',
-      value: function (s) { return s.date; },
-      label: function (s) { return s.date_label; } },
-  ];
-  const EXAM_STEP = 2;   // position of the exam dropdown in the list above
+  document.querySelectorAll('.exam-register').forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (button.classList.contains('exam-register--off')) return;   // already registered or full
 
-  // What the student has chosen so far. '' means nothing chosen.
-  const state = {};
-  steps.forEach(function (step) { state[step.id] = ''; });
+      // Very old browsers have no <dialog>: fall back to the browser's own confirm box
+      if (typeof dialog.showModal !== 'function') {
+        if (window.confirm('Register for ' + button.dataset.examName + '?')) register(button);
+        return;
+      }
 
-  function selectFor(step) { return document.getElementById('select-' + step.id); }
-
-  // Shows a message under the Register button; isError makes it red, otherwise it is green
-  function showStatus(text, isError) {
-    statusLine.textContent = text;
-    statusLine.classList.toggle('exam-status--error', Boolean(text) && isError);
-    statusLine.classList.toggle('exam-status--ok', Boolean(text) && !isError);
-  }
-
-  // One line describing a session, used in messages
-  function summary(s) {
-    return s.date_label + ' at ' + s.time_label + ', ' + s.campus + ', Building ' + s.building + ', Room ' + s.room_num;
-  }
-
-  // The sessions that fit every choice made in the steps before position `index`
-  function matching(index) {
-    return sessions.filter(function (s) {
-      return steps.slice(0, index).every(function (step) {
-        return state[step.id] === '' || step.value(s) === state[step.id];
-      });
+      pendingButton = button;
+      if (button.classList.contains('exam-register--off')) return;   // already registered or full
+      document.getElementById('confirm-exam').textContent = button.dataset.examName;
+      document.getElementById('confirm-when').textContent = button.dataset.examWhen;
+      document.getElementById('confirm-where').textContent = button.dataset.examWhere;
+      dialog.returnValue = '';   // forget the answer from last time
+      dialog.showModal();
     });
-  }
-
-  // True when the chosen exam is one the student already has a booking for
-  function examIsRegistered() {
-    return state.exam !== '' && sessions.some(function (s) {
-      return String(s.exam_id) === state.exam && s.exam_registered;
-    });
-  }
-
-  // A dropdown is open once every required dropdown above it has a choice.
-  // If the student already booked this exam, everything below the exam dropdown stays closed.
-  function stepIsOpen(index) {
-    if (index > EXAM_STEP && examIsRegistered()) return false;
-    return steps.slice(0, index).every(function (step) {
-      return !step.required || state[step.id] !== '';
-    });
-  }
-
-  function byLabel(a, b) { return a.label.localeCompare(b.label, undefined, { numeric: true }); }
-  function byValue(a, b) { return a.value.localeCompare(b.value); }
-
-  // Rebuilds the options of every dropdown from position `from` onward
-  function refresh(from) {
-    for (let i = from; i < steps.length; i++) {
-      const step = steps[i];
-      const select = selectFor(step);
-
-      // The distinct options among the sessions that fit the choices above this dropdown
-      const seen = new Map();
-      matching(i).forEach(function (s) {
-        if (!seen.has(step.value(s))) seen.set(step.value(s), step.label(s));
-      });
-      const choices = Array.from(seen, function (pair) { return { value: pair[0], label: pair[1] }; });
-      choices.sort(step.id === 'date' ? byValue : byLabel);
-
-      select.replaceChildren();
-      const first = document.createElement('option');
-      first.value = '';
-      first.textContent = step.anyText;
-      select.append(first);
-      choices.forEach(function (choice) {
-        const option = document.createElement('option');
-        option.value = choice.value;
-        option.textContent = choice.label;
-        select.append(option);
-      });
-
-      select.value = state[step.id];
-      select.disabled = !stepIsOpen(i);
-    }
-  }
-
-  // Shows the time radio buttons for the chosen date (hidden until a date is chosen)
-  function renderTimes() {
-    timeList.replaceChildren();
-    registerButton.disabled = true;   // turns on again once a time is picked
-
-    const open = state.date !== '' && !examIsRegistered();
-    timesBox.hidden = !open;
-    if (!open) return;
-
-    // Every session that fits all the choices, earliest time first
-    const times = matching(steps.length).slice().sort(function (a, b) {
-      return a.time.localeCompare(b.time) || a.campus.localeCompare(b.campus);
-    });
-    times.forEach(function (s) { timeList.append(buildTimeOption(s)); });
-  }
-
-  // Builds one radio button card for a session
-  function buildTimeOption(s) {
-    const label = document.createElement('label');
-    label.className = 'session-option';
-
-    const radio = document.createElement('input');
-    radio.type = 'radio';
-    radio.name = 'session';
-    radio.value = s.session_id;
-    radio.addEventListener('change', function () {
-      registerButton.disabled = false;
-      showStatus('', false);
-    });
-
-    // textContent (not innerHTML) is used so exam text can never run as HTML
-    const body = document.createElement('span');
-    body.className = 'session-option__body';
-    const when = document.createElement('span');
-    when.className = 'session-option__when';
-    when.textContent = s.time_label;
-    const where = document.createElement('span');
-    where.className = 'session-option__where';
-    where.textContent = s.campus + ', Building ' + s.building + ', Room ' + s.room_num;
-    const meta = document.createElement('span');
-    meta.className = 'session-option__meta';
-    meta.textContent = 'Proctor: ' + s.proctor + ' · ' + s.open_seats + ' of ' + s.capacity + ' seats open';
-    body.append(when, where, meta);
-
-    label.append(radio, body);
-    return label;
-  }
-
-  // Shows the exam's description, or a note if the student already booked it
-  function updateExamInfo() {
-    const chosen = state.exam === '' ? null : sessions.find(function (s) { return String(s.exam_id) === state.exam; });
-    description.textContent = chosen ? chosen.description : '';
-
-    if (examIsRegistered()) {
-      const booked = sessions.find(function (s) { return String(s.exam_id) === state.exam && s.registered; });
-      showStatus('You’re already registered for this exam: ' + summary(booked), false);
-    } else {
-      showStatus('', false);
-    }
-  }
-
-  // A dropdown changed: remember the choice, clear everything below it, and rebuild what is below
-  steps.forEach(function (step, index) {
-    selectFor(step).addEventListener('change', function () {
-      state[step.id] = this.value;
-      for (let j = index + 1; j < steps.length; j++) state[steps[j].id] = '';
-      refresh(index + 1);
-      renderTimes();
-      updateExamInfo();
-    });
-  });
-
-  document.getElementById('exam-picker').addEventListener('submit', function (event) {
-    event.preventDefault();   // pressing Enter must not reload the page
-  });
-
-  // Register button: open the confirmation popup for the chosen time
-  registerButton.addEventListener('click', function () {
-    const radio = document.querySelector('input[name="session"]:checked');
-    if (!radio) return;
-    const s = sessionsById.get(radio.value);
-
-    // Very old browsers have no <dialog>: fall back to the browser's own confirm box
-    if (typeof dialog.showModal !== 'function') {
-      if (window.confirm('Register for ' + s.exam_name + '?')) register(s);
-      return;
-    }
-
-    pendingSession = s;
-    document.getElementById('confirm-exam').textContent = s.exam_name;
-    document.getElementById('confirm-when').textContent = s.date_label + ' at ' + s.time_label;
-    document.getElementById('confirm-where').textContent = s.campus + ', Building ' + s.building + ', Room ' + s.room_num;
-    dialog.returnValue = '';   // forget the answer from last time
-    dialog.showModal();
   });
 
   // A click on the dark area around the popup works like Cancel
@@ -427,21 +197,22 @@
 
   // Runs however the popup closes: Register, Cancel, the Esc key, or a click outside
   dialog.addEventListener('close', function () {
-    const s = pendingSession;
-    pendingSession = null;
-    if (dialog.returnValue === 'confirm' && s) register(s);
+    const button = pendingButton;
+    pendingButton = null;
+    if (dialog.returnValue === 'confirm' && button) register(button);
   });
 
-  // Sends the chosen session to Flask, then updates the page with the answer
-  async function register(s) {
-    registerButton.disabled = true;   // prevents double-clicks while waiting
-    showStatus('', false);
+  async function register(button) {
+    const entry = button.closest('.exam-entry');
+    const status = entry.querySelector('.exam-entry__status');
+    button.disabled = true;           // prevents double-clicks while waiting
+    status.textContent = '';
 
     try {
       const response = await fetch('/exams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: Number(s.session_id) }),
+        body: JSON.stringify({ session_id: Number(button.dataset.sessionId) }),
       });
 
       if (response.status === 401) {  // logged out: send them to the home page
@@ -449,36 +220,22 @@
         return;
       }
 
-      const result = await response.json().catch(function () { return {}; });
+      const result = await response.json();
 
       if (response.ok) {
-        markRegistered(s);
-        showStatus(result.message + ' ' + summary(s), false);
+        status.textContent = result.message;
+        button.textContent = 'Registered';   // stays disabled
+        button.classList.add('exam-register--off');
+        const taken = entry.querySelector('.seats-taken');
+        taken.textContent = Number(taken.textContent) + 1;
       } else {
-        showStatus(result.error || 'Something went wrong. Please try again.', true);
-        registerButton.disabled = false;
+        status.textContent = result.error;
+        button.disabled = false;
       }
     } catch (error) {
-      showStatus('Could not reach the server. Please try again.', true);
-      registerButton.disabled = false;
+      status.textContent = 'Could not reach the server. Please try again.';
+      button.disabled = false;
     }
   }
-
-  // After a successful booking: remember it, lock the exam, and close the steps below the exam dropdown
-  function markRegistered(s) {
-    s.registered = true;
-    s.open_seats = Math.max(0, s.open_seats - 1);
-    sessions.forEach(function (other) {
-      if (other.exam_id === s.exam_id) other.exam_registered = true;   // one booking per exam
-    });
-    for (let j = EXAM_STEP + 1; j < steps.length; j++) state[steps[j].id] = '';
-    refresh(EXAM_STEP);   // the exam now shows "(you're registered)" and the steps below it close
-    renderTimes();
-  }
-
-  // Start: fill in every dropdown (only the first one is open)
-  refresh(0);
-  renderTimes();
-  updateExamInfo();
 </script>
 {% endblock %}
